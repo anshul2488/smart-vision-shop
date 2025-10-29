@@ -22,6 +22,13 @@ class ZeptoScraper:
         self.search_endpoint = f"{self.base_url}/search"
         self.session = requests.Session()
         
+        # Alternative endpoints to try
+        self.alternative_endpoints = [
+            "https://api.zeptonow.com/v1/search",
+            "https://www.zeptonow.com/api/v1/search",
+            "https://cdn.bff.zeptonow.com/api/v2/search"
+        ]
+        
         # Configure session with retry strategy
         retry_strategy = Retry(
             total=3,
@@ -135,27 +142,36 @@ class ZeptoScraper:
             List of product dictionaries
         """
         try:
+            print(f"🔍 Zepto: Searching for '{query}'...")
             # Try API approach first
             api_results = self._search_via_api(query, max_results)
             if api_results:
+                print(f"✅ Zepto: Found {len(api_results)} products via API")
                 return api_results
             
             # Fallback to web scraping approach
-            print(f"API failed, trying web scraping for: {query}")
+            print(f"🔄 Zepto: API failed, trying web scraping for: {query}")
             web_results = self._search_via_web(query, max_results)
             if web_results:
+                print(f"✅ Zepto: Found {len(web_results)} products via web scraping")
                 return web_results
             
             # Final fallback to alternative approach
-            print(f"Web scraping failed, using alternative approach for: {query}")
-            return self._try_alternative_approach(query, max_results)
+            print(f"🔄 Zepto: Web scraping failed, using alternative approach for: {query}")
+            alt_results = self._try_alternative_approach(query, max_results)
+            if alt_results:
+                print(f"✅ Zepto: Found {len(alt_results)} products via alternative approach")
+                return alt_results
+            else:
+                print(f"❌ Zepto: No products found for '{query}'")
+                return []
                 
         except Exception as e:
-            print(f"Error searching Zepto: {str(e)}")
+            print(f"❌ Zepto: Error searching '{query}': {str(e)}")
             return []
     
     def _search_via_api(self, query: str, max_results: int) -> List[Dict[str, Any]]:
-        """Try to search via API"""
+        """Try to search via API with multiple endpoints"""
         try:
             # Prepare search payload
             search_payload = {
@@ -167,23 +183,57 @@ class ZeptoScraper:
                 "store_id": "b4dc8d65-ed2e-4142-81b6-373982b13500"
             }
             
-            # Add random delay to avoid rate limiting
-            time.sleep(random.uniform(1, 3))
+            # Try multiple endpoints
+            endpoints_to_try = [self.search_endpoint] + self.alternative_endpoints
             
-            # Make the request
-            response = self.session.post(
-                self.search_endpoint,
-                headers=self.default_headers,
-                json=search_payload,
-                timeout=30
-            )
+            for endpoint in endpoints_to_try:
+                try:
+                    print(f"Trying Zepto endpoint: {endpoint}")
+                    
+                    # Update headers for this request
+                    headers = self.default_headers.copy()
+                    headers.update({
+                        'Referer': 'https://www.zeptonow.com/',
+                        'Origin': 'https://www.zeptonow.com',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
+                    })
+                    
+                    # Try GET request first
+                    get_url = f"{endpoint}?q={query.replace(' ', '+')}&limit={max_results}"
+                    response = self.session.get(get_url, headers=headers, timeout=15)
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        results = self._parse_search_results(data)
+                        if results:
+                            print(f"✅ Success with GET request to {endpoint}")
+                            return results
+                    
+                    # Try POST request
+                    response = self.session.post(
+                        endpoint,
+                        headers=headers,
+                        json=search_payload,
+                        timeout=15
+                    )
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        results = self._parse_search_results(data)
+                        if results:
+                            print(f"✅ Success with POST request to {endpoint}")
+                            return results
+                        else:
+                            print(f"❌ No results from {endpoint}")
+                    else:
+                        print(f"❌ API error {response.status_code} from {endpoint}")
+                        
+                except Exception as e:
+                    print(f"❌ Error with {endpoint}: {str(e)}")
+                    continue
             
-            if response.status_code == 200:
-                data = response.json()
-                return self._parse_search_results(data)
-            else:
-                print(f"Zepto API error: {response.status_code} - {response.text}")
-                return []
+            print("All API endpoints failed")
+            return []
                 
         except Exception as e:
             print(f"API search failed: {str(e)}")
@@ -210,120 +260,209 @@ class ZeptoScraper:
                 'Cache-Control': 'max-age=0'
             }
             
-            # Add random delay
-            time.sleep(random.uniform(2, 5))
+            # Removed delay for faster processing
             
-            response = self.session.get(search_url, headers=web_headers, timeout=30)
+            response = self.session.get(search_url, headers=web_headers, timeout=15)
             
             if response.status_code == 200:
-                # For now, return sample data since we can't easily parse the HTML
-                # In a real implementation, you'd parse the HTML for product data
-                return self._generate_sample_data(query, max_results)
+                # Try to extract products from HTML
+                return self._extract_products_from_html(response.text, query, max_results)
             else:
                 print(f"Web search failed: {response.status_code}")
-                return self._generate_sample_data(query, max_results)
+                return []
                 
         except Exception as e:
             print(f"Web search error: {str(e)}")
-            return self._generate_sample_data(query, max_results)
+            return []
     
-    def _generate_sample_data(self, query: str, max_results: int) -> List[Dict[str, Any]]:
-        """Generate sample data when scraping fails"""
-        # This is a fallback to provide some data when the real scraping fails
-        sample_products = []
-        
-        # Common grocery items with realistic prices
-        sample_data = {
-            'milk': [
-                {'name': 'Amul Fresh Milk 1L', 'price': '65', 'brand': 'Amul', 'variant': '1L'},
-                {'name': 'Mother Dairy Toned Milk 1L', 'price': '62', 'brand': 'Mother Dairy', 'variant': '1L'},
-                {'name': 'Heritage Fresh Milk 1L', 'price': '68', 'brand': 'Heritage', 'variant': '1L'}
-            ],
-            'bread': [
-                {'name': 'Britannia Brown Bread', 'price': '35', 'brand': 'Britannia', 'variant': '400g'},
-                {'name': 'Modern White Bread', 'price': '28', 'brand': 'Modern', 'variant': '400g'},
-                {'name': 'English Oven Brown Bread', 'price': '42', 'brand': 'English Oven', 'variant': '400g'}
-            ],
-            'eggs': [
-                {'name': 'Farm Fresh Eggs', 'price': '6', 'brand': 'Farm Fresh', 'variant': '1 piece'},
-                {'name': 'Happy Hens Eggs', 'price': '7', 'brand': 'Happy Hens', 'variant': '1 piece'},
-                {'name': 'Country Eggs', 'price': '5', 'brand': 'Country', 'variant': '1 piece'}
-            ],
-            'rice': [
-                {'name': 'India Gate Basmati Rice 1kg', 'price': '180', 'brand': 'India Gate', 'variant': '1kg'},
-                {'name': 'Fortune Basmati Rice 1kg', 'price': '165', 'brand': 'Fortune', 'variant': '1kg'},
-                {'name': 'Kohinoor Basmati Rice 1kg', 'price': '175', 'brand': 'Kohinoor', 'variant': '1kg'}
-            ],
-            'tomatoes': [
-                {'name': 'Fresh Tomatoes', 'price': '45', 'brand': 'Fresh', 'variant': '1kg'},
-                {'name': 'Organic Tomatoes', 'price': '65', 'brand': 'Organic', 'variant': '1kg'},
-                {'name': 'Cherry Tomatoes', 'price': '120', 'brand': 'Cherry', 'variant': '500g'}
-            ]
-        }
-        
-        # Get sample data for the query
-        query_lower = query.lower()
-        for key, products in sample_data.items():
-            if key in query_lower:
-                for product in products[:max_results]:
-                    sample_products.append({
-                        'name': product['name'],
-                        'price': product['price'],
-                        'original_price': product['price'],
-                        'rating': str(random.uniform(3.5, 4.8)),
-                        'review_count': str(random.randint(50, 500)),
-                        'product_url': f"https://www.zeptonow.com/product/{product['name'].lower().replace(' ', '-')}",
-                        'image_url': '',
-                        'brand': product['brand'],
-                        'variant': product['variant'],
-                        'available': True,
-                        'eta': '10-15 mins',
-                        'scraped_at': datetime.now().isoformat(),
-                        'platform': 'zepto'
-                    })
-                break
-        
-        # If no specific data found, create generic sample
-        if not sample_products:
-            for i in range(min(3, max_results)):
-                sample_products.append({
-                    'name': f'{query.title()} - Product {i+1}',
-                    'price': str(random.randint(20, 200)),
-                    'original_price': str(random.randint(20, 200)),
-                    'rating': str(random.uniform(3.5, 4.8)),
-                    'review_count': str(random.randint(50, 500)),
-                    'product_url': f"https://www.zeptonow.com/product/{query.lower().replace(' ', '-')}-{i+1}",
-                    'image_url': '',
-                    'brand': 'Generic',
-                    'variant': '1 unit',
-                    'available': True,
-                    'eta': '10-15 mins',
-                    'scraped_at': datetime.now().isoformat(),
-                    'platform': 'zepto'
-                })
-        
-        return sample_products
     
     def _try_alternative_approach(self, query: str, max_results: int) -> List[Dict[str, Any]]:
         """Try alternative approaches to get real data"""
         try:
-            # Try using a different endpoint or approach
-            # This could include using different headers, proxies, or alternative APIs
+            print(f"Trying alternative approach for: {query}")
             
-            # For now, we'll use the sample data approach
-            # In a production environment, you might want to:
-            # 1. Use rotating proxies
-            # 2. Use browser automation (Selenium)
-            # 3. Use different user agents
-            # 4. Implement CAPTCHA solving
-            # 5. Use residential proxies
+            # Try direct web scraping with different headers
+            search_url = f"https://www.zeptonow.com/search?q={query.replace(' ', '+')}"
             
-            print(f"Using fallback data for: {query}")
-            return self._generate_sample_data(query, max_results)
+            # Use more realistic headers
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Cache-Control': 'max-age=0',
+                'Referer': 'https://www.zeptonow.com/'
+            }
+            
+            response = self.session.get(search_url, headers=headers, timeout=15)
+            
+            if response.status_code == 200:
+                # Try to extract product data from HTML
+                return self._extract_products_from_html(response.text, query, max_results)
+            else:
+                print(f"Web scraping failed: {response.status_code}")
+                return []
             
         except Exception as e:
             print(f"Alternative approach failed: {str(e)}")
-            return self._generate_sample_data(query, max_results)
+            return []
+    
+    def _extract_products_from_html(self, html_content: str, query: str, max_results: int) -> List[Dict[str, Any]]:
+        """Extract product data from HTML content"""
+        try:
+            import re
+            import json
+            
+            # Method 1: Look for JSON data in script tags with various patterns
+            json_patterns = [
+                r'window\.__INITIAL_STATE__\s*=\s*({.*?});',
+                r'window\.__PRELOADED_STATE__\s*=\s*({.*?});',
+                r'window\.__NEXT_DATA__\s*=\s*({.*?});',
+                r'__NEXT_DATA__"\s*type="application/json">({.*?})</script>',
+                r'window\.__APOLLO_STATE__\s*=\s*({.*?});'
+            ]
+            
+            for pattern in json_patterns:
+                matches = re.findall(pattern, html_content, re.DOTALL)
+                for match in matches:
+                    try:
+                        data = json.loads(match)
+                        # Try different data structures
+                        products = self._extract_products_from_json(data)
+                        if products:
+                            return self._parse_products_from_data(products, max_results)
+                    except json.JSONDecodeError:
+                        continue
+            
+            # Method 2: Look for product data in script tags
+            script_patterns = [
+                r'<script[^>]*>.*?products.*?(\[.*?\])',
+                r'<script[^>]*>.*?items.*?(\[.*?\])',
+                r'<script[^>]*>.*?results.*?(\[.*?\])'
+            ]
+            
+            for pattern in script_patterns:
+                matches = re.findall(pattern, html_content, re.DOTALL)
+                for match in matches:
+                    try:
+                        products = json.loads(match)
+                        if isinstance(products, list) and len(products) > 0:
+                            return self._parse_products_from_data(products, max_results)
+                    except json.JSONDecodeError:
+                        continue
+            
+            # Method 3: Direct HTML parsing for product cards
+            products = self._parse_html_product_cards(html_content, max_results)
+            if products:
+                return products
+            
+            print("Could not extract products from HTML")
+            return []
+            
+        except Exception as e:
+            print(f"HTML extraction failed: {str(e)}")
+            return []
+    
+    def _extract_products_from_json(self, data: dict) -> List[Dict]:
+        """Extract products from various JSON data structures"""
+        try:
+            # Try different possible paths in the JSON
+            paths_to_try = [
+                ['search', 'products'],
+                ['products'],
+                ['data', 'products'],
+                ['results', 'products'],
+                ['items'],
+                ['data', 'items'],
+                ['search', 'results'],
+                ['results']
+            ]
+            
+            for path in paths_to_try:
+                current = data
+                for key in path:
+                    if isinstance(current, dict) and key in current:
+                        current = current[key]
+                    else:
+                        current = None
+                        break
+                
+                if isinstance(current, list) and len(current) > 0:
+                    return current
+            
+            return []
+        except Exception:
+            return []
+    
+    def _parse_html_product_cards(self, html_content: str, max_results: int) -> List[Dict[str, Any]]:
+        """Parse product cards directly from HTML"""
+        try:
+            import re
+            
+            # Look for product card patterns
+            product_patterns = [
+                r'<div[^>]*class="[^"]*product[^"]*"[^>]*>.*?</div>',
+                r'<div[^>]*class="[^"]*item[^"]*"[^>]*>.*?</div>',
+                r'<div[^>]*class="[^"]*card[^"]*"[^>]*>.*?</div>'
+            ]
+            
+            products = []
+            for pattern in product_patterns:
+                matches = re.findall(pattern, html_content, re.DOTALL | re.IGNORECASE)
+                
+                for match in matches[:max_results]:
+                    # Extract basic product info
+                    name_match = re.search(r'<[^>]*class="[^"]*name[^"]*"[^>]*>([^<]+)</', match, re.IGNORECASE)
+                    price_match = re.search(r'<[^>]*class="[^"]*price[^"]*"[^>]*>([^<]+)</', match, re.IGNORECASE)
+                    
+                    if name_match and price_match:
+                        products.append({
+                            'name': name_match.group(1).strip(),
+                            'price': price_match.group(1).strip(),
+                            'brand': '',
+                            'rating': '',
+                            'product_url': '',
+                            'image_url': '',
+                            'variant': '',
+                            'inventory': 0,
+                            'eta': ''
+                        })
+            
+            return products[:max_results]
+        except Exception:
+            return []
+    
+    def _parse_products_from_data(self, products: List[Dict], max_results: int) -> List[Dict[str, Any]]:
+        """Parse products from extracted data"""
+        parsed_products = []
+        
+        for product in products[:max_results]:
+            try:
+                parsed_product = {
+                    'name': product.get('name', ''),
+                    'price': str(product.get('price', 0)),
+                    'brand': product.get('brand', ''),
+                    'variant': product.get('variant', ''),
+                    'image_url': product.get('image_url', ''),
+                    'product_url': product.get('url', ''),
+                    'rating': product.get('rating', ''),
+                    'review_count': product.get('review_count', ''),
+                    'available': product.get('available', True),
+                    'eta': product.get('eta', ''),
+                    'platform': 'zepto'
+                }
+                parsed_products.append(parsed_product)
+            except Exception as e:
+                print(f"Error parsing product: {str(e)}")
+                continue
+        
+        return parsed_products
     
     def _parse_search_results(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
@@ -522,15 +661,14 @@ def test_zepto_scraper():
         else:
             print("  No products found")
         
-        # Add delay between requests
-        time.sleep(2)
+        # Removed delay for faster processing
     
     # Save all results
     all_products = []
     for query in test_queries:
         products = scraper.search_products(query, max_results=10)
         all_products.extend(products)
-        time.sleep(1)
+        # Removed delay for faster processing
     
     if all_products:
         scraper.save_results(all_products)

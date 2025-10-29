@@ -99,6 +99,43 @@ def build_blinkit_alternative_urls(item_name: str) -> list:
     return possible_urls
 
 
+def build_blinkit_url_with_pagination(item_name: str, offset: int = 0, limit: int = 12) -> str:
+    """
+    Build Blinkit API URL with pagination parameters (based on current headers).
+    
+    Args:
+        item_name (str): The item to search for
+        offset (int): Offset for pagination
+        limit (int): Number of items per page
+        
+    Returns:
+        str: Complete Blinkit API URL with pagination
+    """
+    encoded_item = urllib.parse.quote_plus(item_name)
+    
+    # Build URL with pagination parameters from current headers
+    base_url = "https://blinkit.com/v1/layout/search"
+    
+    params = {
+        'offset': str(offset),
+        'limit': str(limit),
+        'last_snippet_type': 'product_card_snippet_type_2',
+        'last_widget_type': 'listing_container',
+        'page_index': '1',
+        'q': encoded_item,
+        'search_count': '21',  # Updated from current headers
+        'search_method': 'basic',
+        'search_type': 'type_to_search',
+        'total_entities_processed': '1',
+        'total_pagination_items': '21'
+    }
+    
+    query_string = urllib.parse.urlencode(params)
+    url = f"{base_url}?{query_string}"
+    
+    return url
+
+
 def clean_text(text: str) -> str:
     """
     Clean and normalize text data.

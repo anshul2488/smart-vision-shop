@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SmartShop Vision - Bulk Search</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="container header-inner">
+        <div class="brand">
+          <div class="logo">🛒</div>
+          <h1 class="app-title">SmartShop Vision</h1>
+          <span class="tagline">Smart Grocery Shopping</span>
+        </div>
+        <nav class="header-actions">
+          <a href="single-search.html" class="btn btn-ghost" aria-label="Single Item Search">🔍 Single Search</a>
+          <button id="bulkSearchBtn" class="btn btn-primary" aria-label="Bulk Search">📝 Bulk Search</button>
+          <button id="resetBtn" class="btn btn-ghost" aria-label="Reset inputs">Reset</button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      <!-- Bulk Search Section -->
+      <section class="panel" aria-labelledby="input-title">
+        <div class="panel-header">
+          <h2 id="input-title">📝 Bulk Grocery List</h2>
+          <p class="panel-subtitle">Upload an image or type multiple items to compare prices</p>
+        </div>
+        <div class="grid-2">
+          <div class="stack">
+            <label for="groceryText" class="label">Type or paste items (one per line)</label>
+            <textarea id="groceryText" class="input input-textarea" placeholder="e.g.
+1 kg tomatoes
+2 bread
+milk 1L
+eggs 12"></textarea>
+            <div class="row gap-sm">
+              <button id="parseTextBtn" class="btn">Preview items</button>
+              <button id="clearTextBtn" class="btn btn-ghost">Clear</button>
+            </div>
+          </div>
+          <div class="stack">
+            <label for="imageInput" class="label">Or upload an image of your list</label>
+            <input id="imageInput" type="file" accept="image/*" class="input" />
+            <div class="row gap-sm">
+              <button id="parseImageBtn" class="btn">Parse image</button>
+              <span class="muted">Upload a handwritten grocery list image.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="preview-title">
+        <div class="panel-header">
+          <h2 id="preview-title">Items preview</h2>
+          <div class="row gap-sm">
+            <button id="compareBtn" class="btn" disabled>Compare prices</button>
+            <button id="sampleBtn" class="btn btn-ghost">Load sample list</button>
+          </div>
+        </div>
+        <ul id="itemsList" class="items-list" aria-live="polite"></ul>
+      </section>
+
+      <section class="panel" aria-labelledby="compare-title">
+        <div class="panel-header">
+          <h2 id="compare-title">🏪 Compare Platforms</h2>
+          <span id="compareStatus" class="muted">Add items above, then compare.</span>
+        </div>
+        <div class="cards" id="platformCards">
+          <!-- Cards rendered by app.js -->
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <div class="container">
+        <div class="footer-content">
+          <div class="footer-brand">
+            <span class="logo">🛒</span>
+            <span>SmartShop Vision</span>
+          </div>
+          <span>© <span id="year"></span> Smart Grocery Shopping Made Easy</span>
+        </div>
+      </div>
+    </footer>
+
+    <div id="toast" role="status" aria-live="polite" class="toast" hidden></div>
+
+    <script src="bulk-search.js"></script>
+  </body>
+</html>

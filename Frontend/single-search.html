@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SmartShop Vision - Single Item Search</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="container header-inner">
+        <div class="brand">
+          <div class="logo">🛒</div>
+          <h1 class="app-title">SmartShop Vision</h1>
+          <span class="tagline">Smart Grocery Shopping</span>
+        </div>
+        <nav class="header-actions">
+          <button id="singleSearchBtn" class="btn btn-primary" aria-label="Single Item Search">🔍 Single Search</button>
+          <a href="bulk-search.html" class="btn btn-ghost" aria-label="Bulk Search">📝 Bulk Search</a>
+          <button id="resetBtn" class="btn btn-ghost" aria-label="Reset inputs">Reset</button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      <!-- Single Item Search Section -->
+      <section class="panel single-search-panel" aria-labelledby="single-search-title">
+        <div class="panel-header">
+          <h2 id="single-search-title">🔍 Search Single Item</h2>
+          <p class="panel-subtitle">Find the best prices for any grocery item across all platforms</p>
+        </div>
+        <div class="search-container">
+          <div class="search-input-wrapper">
+            <input 
+              id="singleItemInput" 
+              type="text" 
+              class="input search-input" 
+              placeholder="Type to search for items (e.g., milk, bread, tomatoes...)"
+              autocomplete="off"
+            />
+            <div id="autocompleteDropdown" class="autocomplete-dropdown" style="display: none;"></div>
+            <button id="searchSingleBtn" class="btn search-btn" disabled>
+              <span class="btn-text">Search Prices</span>
+              <span class="btn-icon">🔍</span>
+            </button>
+          </div>
+          <div class="search-suggestions">
+            <span class="suggestion-label">Popular searches:</span>
+            <div class="suggestion-tags">
+              <button class="suggestion-tag" data-item="milk">🥛 Milk</button>
+              <button class="suggestion-tag" data-item="bread">🍞 Bread</button>
+              <button class="suggestion-tag" data-item="eggs">🥚 Eggs</button>
+              <button class="suggestion-tag" data-item="rice">🍚 Rice</button>
+              <button class="suggestion-tag" data-item="tomatoes">🍅 Tomatoes</button>
+              <button class="suggestion-tag" data-item="onions">🧅 Onions</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="compare-title">
+        <div class="panel-header">
+          <h2 id="compare-title">🏪 Compare Platforms</h2>
+          <span id="compareStatus" class="muted">Search for items above to compare prices.</span>
+        </div>
+        <div class="cards" id="platformCards">
+          <!-- Cards rendered by app.js -->
+        </div>
+        <div id="relatedItemsSection" class="related-items-section" style="display: none;">
+          <h3>🛍️ Related Items You Might Like</h3>
+          <div id="relatedItems" class="related-items-grid">
+            <!-- Related items will be populated here -->
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <div class="container">
+        <div class="footer-content">
+          <div class="footer-brand">
+            <span class="logo">🛒</span>
+            <span>SmartShop Vision</span>
+          </div>
+          <span>© <span id="year"></span> Smart Grocery Shopping Made Easy</span>
+        </div>
+      </div>
+    </footer>
+
+    <div id="toast" role="status" aria-live="polite" class="toast" hidden></div>
+
+    <script src="single-search.js"></script>
+  </body>
+</html>

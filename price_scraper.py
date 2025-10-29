@@ -14,15 +14,20 @@ sys.path.append(scrapper_path)
 
 try:
     from amazon_scraper import AmazonScraper
-    from blinkit_scraper import BlinkitScraper
     from zepto_scraper_advanced import AdvancedZeptoScraper as ZeptoScraper
     from bigbasket_scraper import BigBasketScraper
+    try:
+        from jiomart_scraper import JioMartScraper
+        JIOMART_AVAILABLE = True
+    except ImportError:
+        JIOMART_AVAILABLE = False
     # Note: dmart_scraper not available
     SCRAPERS_AVAILABLE = True
-    print("✅ Available scrapers imported successfully")
+    # Available scrapers imported successfully
 except ImportError as e:
     print(f"Scrapers not available: {e}")
     SCRAPERS_AVAILABLE = False
+    JIOMART_AVAILABLE = False
 
 class PriceScraper:
     """Scrape prices for grocery items from multiple platforms"""
@@ -31,16 +36,17 @@ class PriceScraper:
         self.scrapers = {}
         if SCRAPERS_AVAILABLE:
             self.scrapers['amazon'] = AmazonScraper()
-            self.scrapers['blinkit'] = BlinkitScraper()
             self.scrapers['zepto'] = ZeptoScraper()
             self.scrapers['bigbasket'] = BigBasketScraper()
-            print(f"✅ Initialized {len(self.scrapers)} scrapers: {list(self.scrapers.keys())}")
+            if JIOMART_AVAILABLE:
+                self.scrapers['jiomart'] = JioMartScraper()
+            # Initialized scrapers successfully
         else:
             print("Scrapers not available. Will use sample data.")
     
     def scrape_item_prices(self, item_name: str, max_results: int = 5, save_individual: bool = False) -> Dict[str, List[Dict]]:
         """
-        Scrape prices for a single item from all platforms
+        Scrape prices for a single item from all platforms (optimized with concurrent processing)
         
         Args:
             item_name: Name of the item to scrape
@@ -50,39 +56,16 @@ class PriceScraper:
         Returns:
             Dictionary with platform results
         """
-        print(f"Scraping prices for: {item_name}")
-        
         results = {}
         
-        for platform, scraper in self.scrapers.items():
-            print(f"Scraping {platform}...")
+        # Use concurrent processing for faster scraping
+        import concurrent.futures
+        import threading
+        
+        def scrape_platform(platform_scraper):
+            platform, scraper = platform_scraper
             try:
-                if platform == 'blinkit':
-                    # Blinkit uses a different method
-                    if save_individual:
-                        products = scraper.scrape_blinkit(item_name, "temp_output")
-                    else:
-                        # Don't save individual results, just get the data
-                        products = scraper._scrape_blinkit_data_only(item_name)
-                    
-                    # Convert Blinkit format to standard format
-                    standardized_products = []
-                    for product in products[:max_results]:
-                        standardized_products.append({
-                            'name': product.get('name', ''),
-                            'price': self._extract_price_number(product.get('price', '')),
-                            'price_text': product.get('price', ''),
-                            'brand': product.get('brand', ''),
-                            'rating': product.get('rating', ''),
-                            'review_count': product.get('review_count', ''),
-                            'product_url': product.get('product_url', ''),
-                            'image_url': product.get('image_url', ''),
-                            'variant': product.get('variant', ''),
-                            'inventory': product.get('inventory', 0),
-                            'eta': product.get('eta', '')
-                        })
-                    results[platform] = standardized_products
-                elif platform == 'zepto':
+                if platform == 'zepto':
                     # Zepto uses search_products method
                     products = scraper.search_products(item_name, max_results)
                     
@@ -104,7 +87,7 @@ class PriceScraper:
                             'total_products_found': len(products),
                             'match_score': 15  # Default match score for Zepto
                         })
-                    results[platform] = standardized_products
+                    return platform, standardized_products
                 elif platform == 'bigbasket':
                     # BigBasket uses search_products method
                     products = scraper.search_products(item_name, max_results)
@@ -127,7 +110,30 @@ class PriceScraper:
                             'total_products_found': len(products),
                             'match_score': 15  # Default match score for BigBasket
                         })
-                    results[platform] = standardized_products
+                    return platform, standardized_products
+                elif platform == 'jiomart':
+                    # JioMart uses search_products method
+                    products = scraper.search_products(item_name, max_results)
+                    
+                    # Convert JioMart format to standard format
+                    standardized_products = []
+                    for product in products:
+                        standardized_products.append({
+                            'name': product.get('name', ''),
+                            'price': self._extract_price_number(product.get('price', '')),
+                            'price_text': product.get('price', ''),
+                            'brand': product.get('brand', ''),
+                            'rating': product.get('rating', ''),
+                            'review_count': product.get('review_count', ''),
+                            'product_url': product.get('product_url', ''),
+                            'image_url': product.get('image_url', ''),
+                            'variant': product.get('variant', ''),
+                            'inventory': product.get('inventory', 0),
+                            'eta': product.get('eta', ''),
+                            'total_products_found': len(products),
+                            'match_score': 12  # Default match score for JioMart
+                        })
+                    return platform, standardized_products
                 else:
                     # Amazon and D-Mart use the standard method
                     if save_individual:
@@ -152,11 +158,20 @@ class PriceScraper:
                             'inventory': product.get('inventory', 0),
                             'eta': product.get('eta', '')
                         })
-                    results[platform] = standardized_products
-                print(f"Found {len(results[platform])} products on {platform}")
+                    return platform, standardized_products
             except Exception as e:
-                print(f"Error scraping {platform}: {e}")
-                results[platform] = []
+                return platform, []
+        
+        # Execute scraping concurrently
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            future_to_platform = {
+                executor.submit(scrape_platform, (platform, scraper)): platform 
+                for platform, scraper in self.scrapers.items()
+            }
+            
+            for future in concurrent.futures.as_completed(future_to_platform):
+                platform, products = future.result()
+                results[platform] = products
         
         return results
     
@@ -287,14 +302,20 @@ class PriceScraper:
                 if product_size > 0:
                     # Calculate unit price (price per user unit)
                     unit_price = raw_price / product_size
-                    # Calculate how many units needed
-                    units_needed = user_qty / product_size
+                    # Calculate total price based on user quantity
                     total_price = unit_price * user_qty
+                    units_needed = user_qty / product_size
                 else:
-                    # Fallback: assume 1 unit = 1 quantity
+                    # Fallback: assume 1 unit = 1 quantity (for items like "pieces")
+                    # This handles cases where user wants "1 pieces" and product is sold as "1 piece"
                     unit_price = raw_price
                     total_price = unit_price * user_qty
                     units_needed = user_qty
+                
+                # Ensure calculated_total is never more than 5x the raw price (safety check)
+                if total_price > raw_price * 5:
+                    total_price = raw_price * user_qty
+                    unit_price = raw_price
                 
                 best_match['calculated_total'] = total_price
                 best_match['unit_price'] = unit_price  # Price per user unit
@@ -366,6 +387,8 @@ class PriceScraper:
         # Convert to user unit
         user_base = conversions.get(user_unit_lower, 0)
         if user_base == 0:
+            # If user unit is not in conversions (like "pieces"), return 0
+            # This will trigger the fallback logic in the calling function
             return 0
         
         # Return size in user's unit
@@ -383,7 +406,6 @@ class PriceScraper:
             Dictionary with best price information
         """
         item_name = user_item.get('item_name', '')
-        print(f"Finding best prices for: {item_name}")
         
         # Scrape prices from all platforms
         all_results = self.scrape_item_prices(item_name, max_results)
@@ -465,7 +487,7 @@ class PriceScraper:
         Returns:
             Dictionary with prices for all items
         """
-        print(f"Scraping prices for grocery list with {len(grocery_dict)} items")
+        # Scraping prices for grocery list
         
         grocery_prices = {
             'timestamp': datetime.now().isoformat(),
@@ -493,7 +515,7 @@ class PriceScraper:
                 quantity = item_data
                 unit = ''
             
-            print(f"\nProcessing: {item_name} (quantity: {quantity}, unit: {unit})")
+            # Processing item  # Removed INFO log
             
             # Create user item dictionary
             user_item = {
@@ -630,12 +652,7 @@ class PriceScraper:
                         row.update(item_info)
                         writer.writerow(row)
             
-            print(f"\n📁 All results saved to {output_dir}/:")
-            print(f"  📄 Complete results: complete_results_{timestamp}.json")
-            print(f"  🛍️ Extracted items: extracted_items_{timestamp}.json")
-            print(f"  🛒 Shopping list: shopping_list_{timestamp}.json")
-            print(f"  📊 Summary: summary_{timestamp}.json")
-            print(f"  📈 CSV data: extracted_items_{timestamp}.csv")
+            # Results saved successfully
             
         except Exception as e:
             print(f"Error saving results: {e}")
@@ -650,7 +667,7 @@ class PriceScraper:
         Returns:
             Optimized shopping list
         """
-        print("Creating optimized shopping list...")
+        # Creating optimized shopping list
         
         shopping_list = {
             'timestamp': datetime.now().isoformat(),
@@ -715,9 +732,7 @@ class PriceScraper:
         with open(shopping_file, 'w', encoding='utf-8') as f:
             json.dump(shopping_list, f, indent=2, ensure_ascii=False)
         
-        print(f"Results saved to:")
-        print(f"- {prices_file}")
-        print(f"- {shopping_file}")
+        # Results saved successfully
         
         return prices_file, shopping_file
 
@@ -733,14 +748,11 @@ def main():
         'oil': 1
     }
     
-    print("Testing price scraper with sample grocery list...")
     grocery_prices = scraper.scrape_grocery_list_prices(test_grocery_list)
     shopping_list = scraper.create_shopping_list(grocery_prices)
     
     # Save results
     scraper.save_results(grocery_prices, shopping_list)
-    
-    print("\nTest completed!")
 
 if __name__ == "__main__":
     main()

@@ -1,35 +1,20 @@
-/* SmartVisionShop Frontend */
+/* SmartVisionShop Single Search */
 (function () {
-  // Bulk search elements
-  const textArea = document.getElementById('groceryText');
-  const parseTextBtn = document.getElementById('parseTextBtn');
-  const clearTextBtn = document.getElementById('clearTextBtn');
-  const parseImageBtn = document.getElementById('parseImageBtn');
-  const compareBtn = document.getElementById('compareBtn');
-  const sampleBtn = document.getElementById('sampleBtn');
-  const itemsList = document.getElementById('itemsList');
-  const platformCards = document.getElementById('platformCards');
-  const compareStatus = document.getElementById('compareStatus');
-  const imageInput = document.getElementById('imageInput');
-  const toast = document.getElementById('toast');
-  const resetBtn = document.getElementById('resetBtn');
-  
   // Single search elements
-  const singleSearchBtn = document.getElementById('singleSearchBtn');
-  const bulkSearchBtn = document.getElementById('bulkSearchBtn');
-  const singleSearchSection = document.getElementById('singleSearchSection');
-  const bulkSearchSection = document.getElementById('bulkSearchSection');
   const singleItemInput = document.getElementById('singleItemInput');
   const searchSingleBtn = document.getElementById('searchSingleBtn');
   const autocompleteDropdown = document.getElementById('autocompleteDropdown');
   const relatedItemsSection = document.getElementById('relatedItemsSection');
   const relatedItems = document.getElementById('relatedItems');
+  const platformCards = document.getElementById('platformCards');
+  const compareStatus = document.getElementById('compareStatus');
+  const toast = document.getElementById('toast');
+  const resetBtn = document.getElementById('resetBtn');
 
   const state = {
     items: [],
     platforms: ['Amazon', 'Zepto', 'BigBasket', 'JioMart'],
     priceData: null,
-    currentMode: 'single', // 'single' or 'bulk'
   };
 
   // Autocomplete data for grocery items
@@ -97,36 +82,13 @@
     showToast._t = window.setTimeout(() => (toast.hidden = true), timeoutMs);
   }
 
-  // Mode switching functions
-  function switchToSingleMode() {
-    state.currentMode = 'single';
-    singleSearchSection.style.display = 'block';
-    bulkSearchSection.style.display = 'none';
-    singleSearchBtn.classList.add('btn-primary');
-    singleSearchBtn.classList.remove('btn-ghost');
-    bulkSearchBtn.classList.add('btn-ghost');
-    bulkSearchBtn.classList.remove('btn-primary');
-    clearAllData();
-  }
-
-  function switchToBulkMode() {
-    state.currentMode = 'bulk';
-    singleSearchSection.style.display = 'none';
-    bulkSearchSection.style.display = 'block';
-    bulkSearchBtn.classList.add('btn-primary');
-    bulkSearchBtn.classList.remove('btn-ghost');
-    singleSearchBtn.classList.add('btn-ghost');
-    singleSearchBtn.classList.remove('btn-primary');
-    clearAllData();
-  }
-
   function clearAllData() {
     state.items = [];
     state.priceData = null;
     singleItemInput.value = '';
     hideAutocomplete();
     hideRelatedItems();
-    renderItems();
+    platformCards.className = 'cards'; // Reset to default vertical layout
     renderCards(null);
   }
 
@@ -219,50 +181,6 @@
   }
 
   // API functions
-  async function parseTextAPI(text) {
-    try {
-      const response = await fetch(`${API_BASE}/parse-text`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ text }),
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error parsing text:', error);
-      throw error;
-    }
-  }
-
-  async function parseImageAPI(imageFile) {
-    try {
-      const formData = new FormData();
-      formData.append('image', imageFile);
-      
-      const response = await fetch(`${API_BASE}/parse-image`, {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error parsing image:', error);
-      throw error;
-    }
-  }
-
   async function searchPricesAPI(items, platforms = ['amazon', 'zepto', 'bigbasket', 'jiomart']) {
     try {
       const response = await fetch(`${API_BASE}/search-prices`, {
@@ -285,71 +203,6 @@
     }
   }
 
-  async function getSampleDataAPI() {
-    try {
-      const response = await fetch(`${API_BASE}/sample-data`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error getting sample data:', error);
-      throw error;
-    }
-  }
-
-  function parseTextToItems(text) {
-    const lines = text
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
-    const result = [];
-    for (const line of lines) {
-      const quantityMatch = line.match(/(^|\s)(\d+\s?[a-zA-Z]*)$/);
-      const numberMatch = line.match(/\b(\d+)\b/);
-      const quantity = quantityMatch ? quantityMatch[2] : numberMatch ? numberMatch[1] : '1';
-      const name = sanitize(line.replace(quantityMatch?.[2] || numberMatch?.[1] || '', '').trim()) || sanitize(line);
-      result.push({ 
-        name, 
-        quantity: String(quantity).trim() || '1',
-        unit: 'pieces' // Default unit
-      });
-    }
-    return result;
-  }
-
-  function renderItems() {
-    itemsList.innerHTML = '';
-    if (state.items.length === 0) {
-      const li = document.createElement('li');
-      li.className = 'muted';
-      li.textContent = 'No items yet. Add some above.';
-      itemsList.appendChild(li);
-      compareBtn.disabled = true;
-      return;
-    }
-    compareBtn.disabled = false;
-    for (const [index, item] of state.items.entries()) {
-      const li = document.createElement('li');
-      li.className = 'item-row';
-      li.innerHTML = `
-        <span class="item-name">${item.name || item.item_name}</span>
-        <span class="item-qty">× ${item.quantity} ${item.unit || ''}</span>
-        ${item.confidence ? `<span class="confidence">(${Math.round(item.confidence * 100)}%)</span>` : ''}
-      `;
-      li.title = `Click to remove ${item.name || item.item_name}`;
-      li.addEventListener('click', () => {
-        state.items.splice(index, 1);
-        renderItems();
-        renderCards(null);
-      });
-      itemsList.appendChild(li);
-    }
-  }
-
   function processPriceData(apiResults) {
     const data = {};
     
@@ -368,74 +221,73 @@
       
       // Process each platform for this item
       for (const [platformKey, platformName] of Object.entries(platformNames)) {
-        // Only process platforms that have products (backend already filtered)
-        if (!result.platforms || !result.platforms[platformKey]) {
-          continue; // Skip platforms with no results
-        }
-        
         if (!data[platformName]) {
           data[platformName] = { items: [], delivery: 0, total: 0 };
         }
         
         const platformData = result.platforms[platformKey];
         if (platformData && platformData.products && platformData.products.length > 0) {
-          // Use the first (best) product
-          const product = platformData.products[0];
-          const priceText = product.price || 'N/A';
-          // Use calculated total if available, otherwise parse price
-          const price = product.calculated_total || parseFloat(priceText.replace(/[^\d.]/g, '')) || 0;
+          // Process all products for this platform
+          const allProducts = platformData.products;
+          console.log(`${platformName} has ${allProducts.length} products:`, allProducts);
           
-          // Check if this item already exists for this platform
-          const existingItemIndex = data[platformName].items.findIndex(item => item.name === itemName);
-          if (existingItemIndex >= 0) {
-            // Update existing item
-            data[platformName].items[existingItemIndex] = {
-              name: itemName,
-              quantity: `${quantity} ${unit}`,
-              price: price,
-              unit_price: product.unit_price || 0,
-              product_url: product.product_url,
-              rating: product.rating,
-              brand: product.brand || '',
-              variant: product.variant || '',
-              eta: product.eta || '',
-              match_score: product.match_score || 0,
-              total_products_found: product.total_products_found || 0
-            };
-          } else {
-            // Add new item
+          // Add all products to the platform data
+          for (const product of allProducts) {
+            // Simply use the raw price without complex calculations
+            const price = typeof product.price === 'number' ? product.price : parseFloat(product.price) || 0;
+            
+            // Add product to platform data
             data[platformName].items.push({
               name: itemName,
               quantity: `${quantity} ${unit}`,
               price: price,
-              unit_price: product.unit_price || 0,
               product_url: product.product_url,
               rating: product.rating,
               brand: product.brand || '',
               variant: product.variant || '',
               eta: product.eta || '',
               match_score: product.match_score || 0,
-              total_products_found: product.total_products_found || 0
+              total_products_found: product.total_products_found || 0,
+              product_name: product.product_name || product.name || itemName,
+              image_url: product.image_url || '',
+              review_count: product.review_count || '',
+              inventory: product.inventory || 0
+            });
+            console.log(`Added product to ${platformName}:`, product.name, 'Total items now:', data[platformName].items.length);
+          }
+        } else {
+          // No products found for this platform
+          const existingItemIndex = data[platformName].items.findIndex(item => item.name === itemName);
+          if (existingItemIndex < 0) {
+            data[platformName].items.push({
+              name: itemName,
+              quantity: `${quantity} ${unit}`,
+              price: 0,
+              product_url: '',
+              rating: 'N/A',
+              brand: '',
+              variant: '',
+              eta: ''
             });
           }
         }
-        // Note: If platform has no products, we skip it entirely (backend already filtered)
       }
     }
     
-    // Calculate totals and delivery for each platform
+    // For single search, we don't need complex totals - just show individual products
     for (const [platformName, platformData] of Object.entries(data)) {
-      const subtotal = platformData.items.reduce((sum, item) => sum + item.price, 0);
-      const delivery = (platformName === 'Zepto' || platformName === 'BigBasket' || platformName === 'JioMart') ? 0 : 50; // Quick commerce platforms have free delivery
-      platformData.delivery = delivery;
-      platformData.total = subtotal + delivery;
+      platformData.delivery = 0; // No delivery charges shown in single search
+      platformData.total = 0; // No total calculation needed
+      console.log(`Final ${platformName} data:`, platformData.items.length, 'items');
     }
     
+    console.log('Final processed data:', data);
     return data;
   }
 
   function renderLoadingCards() {
     platformCards.innerHTML = '';
+    platformCards.className = 'cards'; // Remove horizontal class - platforms should be vertical
     for (const platform of state.platforms) {
       const card = document.createElement('div');
       card.className = 'card loading';
@@ -446,9 +298,12 @@
           </div>
           <div class="price-total">Loading...</div>
         </div>
-        <div class="products-container">
-          ${state.items.map(() => `
+        <div class="products-container scrollable-products">
+          ${Array(3).fill().map(() => `
             <div class="product-card">
+              <div class="product-image">
+                <div class="no-image">⏳</div>
+              </div>
               <div class="product-info">
                 <div class="product-name">Loading...</div>
                 <div class="product-details">
@@ -467,70 +322,57 @@
   }
 
   function renderCards(priceData) {
+    console.log('Rendering cards with data:', priceData);
     platformCards.innerHTML = '';
+    platformCards.className = 'cards'; // Remove horizontal class - platforms should be vertical
     state.priceData = priceData;
-    if (!state.items.length) {
-      compareStatus.textContent = 'Add items above, then compare.';
-      return;
-    }
     if (!priceData) {
-      compareStatus.textContent = 'Ready to compare across platforms.';
+      compareStatus.textContent = 'Search for items above to compare prices.';
       return;
     }
-    const totals = Object.values(priceData).map((p) => p.total);
-    const minTotal = Math.min(...totals);
+    
     compareStatus.textContent = 'Real prices from Amazon India, Zepto, BigBasket, and JioMart.';
 
     for (const [index, platform] of Object.keys(priceData).entries()) {
       const info = priceData[platform];
+      console.log(`Rendering ${platform} with ${info.items.length} items:`, info.items);
       const card = document.createElement('div');
-      const isBest = info.total === minTotal;
 
-      card.className = 'card' + (isBest ? ' best' : '');
+      card.className = 'card';
       card.style.animationDelay = `${index * 0.1}s`;
       card.innerHTML = `
         <div class="card-header">
           <div class="row gap-sm">
             <h3 style="margin:0">${platform}</h3>
-            ${isBest ? '<span class="badge badge--best">Cheapest</span>' : ''}
           </div>
-          <div class="price-total${isBest ? ' best' : ''}">₹ ${info.total.toLocaleString('en-IN')}</div>
         </div>
-        <div class="products-container">
+        <div class="products-container scrollable-products">
           ${info.items
-            .map((it) => `
-              <div class="product-card">
+            .map((it, index) => `
+              <div class="product-card" style="animation-delay: ${index * 0.1}s">
+                <div class="product-image">
+                  ${it.image_url ? `<img src="${it.image_url}" alt="${sanitize(it.product_name || it.name)}" class="product-img" onerror="this.style.display='none'">` : '<div class="no-image">📦</div>'}
+                </div>
                 <div class="product-info">
                   <div class="product-name">
-                    ${sanitize(it.name)} × ${sanitize(String(it.quantity))}
-                    ${it.unit_price > 0 ? `<span class="price-info-icon" title="Price calculation: Unit price × Quantity = Total price">ℹ️</span>` : ''}
+                    ${sanitize(it.product_name || it.name)}
                   </div>
                   <div class="product-details">
                     ${it.brand ? `<div class="product-detail-item"><span class="icon">🏷️</span>${sanitize(it.brand)}</div>` : ''}
                     ${it.variant ? `<div class="product-detail-item"><span class="icon">📦</span>${sanitize(it.variant)}</div>` : ''}
                     ${it.eta ? `<div class="product-detail-item"><span class="icon">🚚</span>${sanitize(it.eta)}</div>` : ''}
-                    ${it.unit_price > 0 ? `<div class="product-detail-item"><span class="icon">💰</span>₹${it.unit_price.toFixed(2)}/${it.quantity.split(' ')[1] || 'unit'}</div>` : ''}
-                    <div class="match-score">Match: ${it.match_score || 0}/20</div>
-                    <div class="products-found">Found: ${it.total_products_found || 0} products</div>
+                    ${it.inventory > 0 ? `<div class="product-detail-item"><span class="icon">📦</span>Stock: ${it.inventory}</div>` : ''}
                   </div>
                   ${it.product_url ? `<a href="${it.product_url}" target="_blank" class="product-link">View Product</a>` : ''}
                 </div>
                 <div class="price-info">
                   <div class="total-price">₹ ${it.price.toLocaleString('en-IN')}</div>
-                  ${it.unit_price > 0 ? `<div class="price-breakdown">🧮 ₹${it.unit_price.toFixed(2)} × ${it.quantity.split(' ')[0] || '1'} = ₹${it.price.toLocaleString('en-IN')}</div>` : ''}
                   ${it.rating && it.rating !== 'N/A' ? `<div class="rating-stars">${it.rating}</div>` : '<div class="muted">No rating</div>'}
+                  ${it.review_count ? `<div class="review-count">${it.review_count} reviews</div>` : ''}
                 </div>
               </div>
             `)
             .join('')}
-          <div class="delivery-info">
-            <div class="product-detail-item">
-              <span class="icon">🚚</span>Delivery
-            </div>
-            <div class="price-info">
-              <div class="total-price">₹ ${info.delivery.toLocaleString('en-IN')}</div>
-            </div>
-          </div>
         </div>
         <button class="btn" data-platform="${platform}">View on ${platform}</button>
       `;
@@ -541,21 +383,14 @@
   }
 
   function redirectToCart(platform) {
-    if (!state.items.length) return;
-    
     let url;
     if (platform.toLowerCase() === 'zepto') {
-      // For Zepto, redirect to the main site
       url = 'https://www.zeptonow.com/';
     } else if (platform.toLowerCase() === 'bigbasket') {
-      // For BigBasket, redirect to search page with items
-      const searchTerm = state.items.map(item => item.name).join(' ');
-      url = `https://www.bigbasket.com/ps/?q=${encodeURIComponent(searchTerm)}`;
+      url = 'https://www.bigbasket.com/';
     } else if (platform.toLowerCase() === 'jiomart') {
-      // For JioMart, redirect to the main site
       url = 'https://www.jiomart.com/';
     } else {
-      // For Amazon and other platforms
       const base = platform.toLowerCase();
       const params = new URLSearchParams();
       params.set('items', JSON.stringify(state.items));
@@ -564,126 +399,6 @@
     
     showToast(`Opening ${platform}...`);
     window.open(url, '_blank');
-  }
-
-  async function handleParseText() {
-    try {
-      const text = textArea.value.trim();
-      if (!text) {
-        showToast('Please enter some text first.');
-        return;
-      }
-
-      showToast('Parsing text...');
-      parseTextBtn.disabled = true;
-      
-      const result = await parseTextAPI(text);
-      
-      if (result.success) {
-        state.items = result.items;
-        renderItems();
-        renderCards(null);
-        showToast(`Parsed ${result.total_items} items successfully!`);
-      } else {
-        showToast('Failed to parse text. Please try again.');
-      }
-    } catch (error) {
-      console.error('Error parsing text:', error);
-      showToast('Error parsing text. Please try again.');
-    } finally {
-      parseTextBtn.disabled = false;
-    }
-  }
-
-  async function handleParseImage() {
-    try {
-      if (!imageInput.files || imageInput.files.length === 0) {
-        showToast('Choose an image first.');
-        return;
-      }
-
-      showToast('Parsing image...');
-      parseImageBtn.disabled = true;
-      
-      const result = await parseImageAPI(imageInput.files[0]);
-      
-      if (result.success) {
-        state.items = result.items;
-        renderItems();
-        renderCards(null);
-        
-        // Show detailed processing information
-        let message = `Parsed ${result.total_items} items from image!`;
-        if (result.processing_info) {
-          message += ` (OCR confidence: ${Math.round(result.ocr_confidence * 100)}%)`;
-        }
-        showToast(message);
-        
-        // Log processing details to console
-        if (result.processing_info) {
-          console.log('Processing details:', result.processing_info);
-        }
-      } else {
-        showToast('Failed to parse image. Please try again.');
-      }
-    } catch (error) {
-      console.error('Error parsing image:', error);
-      showToast('Error parsing image. Please try again.');
-    } finally {
-      parseImageBtn.disabled = false;
-    }
-  }
-
-  async function handleCompare() {
-    if (!state.items.length) return;
-    
-    try {
-      compareStatus.innerHTML = '<div class="loading-text"><div class="loading-spinner"></div>Searching for prices...</div>';
-      compareBtn.disabled = true;
-      
-      // Show loading cards
-      renderLoadingCards();
-      
-      const result = await searchPricesAPI(state.items);
-      
-      if (result.success) {
-        const priceData = processPriceData(result.results);
-        renderCards(priceData);
-        showToast(`Found prices for ${result.total_items} items!`);
-      } else {
-        showToast('Failed to search prices. Please try again.');
-        renderCards(null);
-      }
-    } catch (error) {
-      console.error('Error searching prices:', error);
-      showToast('Error searching prices. Please try again.');
-      renderCards(null);
-    } finally {
-      compareBtn.disabled = false;
-    }
-  }
-
-  async function handleSample() {
-    try {
-      showToast('Loading sample data...');
-      sampleBtn.disabled = true;
-      
-      const result = await getSampleDataAPI();
-      
-      if (result.success) {
-        state.items = result.items;
-        renderItems();
-        renderCards(null);
-        showToast('Sample data loaded!');
-      } else {
-        showToast('Failed to load sample data.');
-      }
-    } catch (error) {
-      console.error('Error loading sample data:', error);
-      showToast('Error loading sample data.');
-    } finally {
-      sampleBtn.disabled = false;
-    }
   }
 
   // Single search handler
@@ -731,23 +446,12 @@
   }
 
   function handleReset() {
-    textArea.value = '';
-    imageInput.value = '';
     clearAllData();
     showToast('Cleared.');
   }
 
   // Event listeners
-  parseTextBtn.addEventListener('click', handleParseText);
-  clearTextBtn.addEventListener('click', handleReset);
-  parseImageBtn.addEventListener('click', handleParseImage);
-  compareBtn.addEventListener('click', handleCompare);
-  sampleBtn.addEventListener('click', handleSample);
   resetBtn.addEventListener('click', handleReset);
-
-  // Single search event listeners
-  singleSearchBtn.addEventListener('click', switchToSingleMode);
-  bulkSearchBtn.addEventListener('click', switchToBulkMode);
   searchSingleBtn.addEventListener('click', handleSingleSearch);
 
   // Autocomplete event listeners
@@ -786,7 +490,5 @@
   });
 
   // Initialize
-  switchToSingleMode();
-  renderItems();
   renderCards(null);
 })();

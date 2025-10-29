@@ -1,6 +1,5 @@
-/* SmartVisionShop Frontend */
+/* Grocery OCR Pipeline Frontend */
 (function () {
-  // Bulk search elements
   const textArea = document.getElementById('groceryText');
   const parseTextBtn = document.getElementById('parseTextBtn');
   const clearTextBtn = document.getElementById('clearTextBtn');
@@ -13,76 +12,11 @@
   const imageInput = document.getElementById('imageInput');
   const toast = document.getElementById('toast');
   const resetBtn = document.getElementById('resetBtn');
-  
-  // Single search elements
-  const singleSearchBtn = document.getElementById('singleSearchBtn');
-  const bulkSearchBtn = document.getElementById('bulkSearchBtn');
-  const singleSearchSection = document.getElementById('singleSearchSection');
-  const bulkSearchSection = document.getElementById('bulkSearchSection');
-  const singleItemInput = document.getElementById('singleItemInput');
-  const searchSingleBtn = document.getElementById('searchSingleBtn');
-  const autocompleteDropdown = document.getElementById('autocompleteDropdown');
-  const relatedItemsSection = document.getElementById('relatedItemsSection');
-  const relatedItems = document.getElementById('relatedItems');
 
   const state = {
     items: [],
     platforms: ['Amazon', 'Zepto', 'BigBasket', 'JioMart'],
     priceData: null,
-    currentMode: 'single', // 'single' or 'bulk'
-  };
-
-  // Autocomplete data for grocery items
-  const autocompleteData = [
-    { name: 'milk', icon: '🥛', category: 'Dairy' },
-    { name: 'bread', icon: '🍞', category: 'Bakery' },
-    { name: 'eggs', icon: '🥚', category: 'Dairy' },
-    { name: 'rice', icon: '🍚', category: 'Grains' },
-    { name: 'tomatoes', icon: '🍅', category: 'Vegetables' },
-    { name: 'onions', icon: '🧅', category: 'Vegetables' },
-    { name: 'potatoes', icon: '🥔', category: 'Vegetables' },
-    { name: 'butter', icon: '🧈', category: 'Dairy' },
-    { name: 'cheese', icon: '🧀', category: 'Dairy' },
-    { name: 'yogurt', icon: '🥛', category: 'Dairy' },
-    { name: 'chicken', icon: '🍗', category: 'Meat' },
-    { name: 'fish', icon: '🐟', category: 'Seafood' },
-    { name: 'bananas', icon: '🍌', category: 'Fruits' },
-    { name: 'apples', icon: '🍎', category: 'Fruits' },
-    { name: 'oranges', icon: '🍊', category: 'Fruits' },
-    { name: 'carrots', icon: '🥕', category: 'Vegetables' },
-    { name: 'spinach', icon: '🥬', category: 'Vegetables' },
-    { name: 'cucumber', icon: '🥒', category: 'Vegetables' },
-    { name: 'garlic', icon: '🧄', category: 'Vegetables' },
-    { name: 'ginger', icon: '🫚', category: 'Vegetables' },
-    { name: 'oil', icon: '🫒', category: 'Cooking' },
-    { name: 'salt', icon: '🧂', category: 'Spices' },
-    { name: 'sugar', icon: '🍯', category: 'Sweeteners' },
-    { name: 'flour', icon: '🌾', category: 'Grains' },
-    { name: 'pasta', icon: '🍝', category: 'Grains' },
-    { name: 'cereal', icon: '🥣', category: 'Breakfast' },
-    { name: 'coffee', icon: '☕', category: 'Beverages' },
-    { name: 'tea', icon: '🍵', category: 'Beverages' },
-    { name: 'juice', icon: '🧃', category: 'Beverages' },
-    { name: 'water', icon: '💧', category: 'Beverages' },
-    { name: 'cookies', icon: '🍪', category: 'Snacks' },
-    { name: 'chips', icon: '🍟', category: 'Snacks' },
-    { name: 'nuts', icon: '🥜', category: 'Snacks' },
-    { name: 'chocolate', icon: '🍫', category: 'Sweets' },
-    { name: 'ice cream', icon: '🍦', category: 'Desserts' },
-  ];
-
-  // Related items mapping
-  const relatedItemsMap = {
-    'milk': ['butter', 'cheese', 'yogurt', 'cereal'],
-    'bread': ['butter', 'jam', 'eggs', 'cheese'],
-    'eggs': ['milk', 'bread', 'butter', 'cheese'],
-    'rice': ['oil', 'onions', 'garlic', 'vegetables'],
-    'tomatoes': ['onions', 'garlic', 'oil', 'basil'],
-    'onions': ['tomatoes', 'garlic', 'potatoes', 'oil'],
-    'potatoes': ['onions', 'oil', 'butter', 'salt'],
-    'butter': ['bread', 'milk', 'eggs', 'cheese'],
-    'chicken': ['onions', 'garlic', 'oil', 'spices'],
-    'fish': ['lemon', 'oil', 'garlic', 'herbs'],
   };
 
   // API base URL
@@ -95,123 +29,6 @@
     toast.hidden = false;
     window.clearTimeout(showToast._t);
     showToast._t = window.setTimeout(() => (toast.hidden = true), timeoutMs);
-  }
-
-  // Mode switching functions
-  function switchToSingleMode() {
-    state.currentMode = 'single';
-    singleSearchSection.style.display = 'block';
-    bulkSearchSection.style.display = 'none';
-    singleSearchBtn.classList.add('btn-primary');
-    singleSearchBtn.classList.remove('btn-ghost');
-    bulkSearchBtn.classList.add('btn-ghost');
-    bulkSearchBtn.classList.remove('btn-primary');
-    clearAllData();
-  }
-
-  function switchToBulkMode() {
-    state.currentMode = 'bulk';
-    singleSearchSection.style.display = 'none';
-    bulkSearchSection.style.display = 'block';
-    bulkSearchBtn.classList.add('btn-primary');
-    bulkSearchBtn.classList.remove('btn-ghost');
-    singleSearchBtn.classList.add('btn-ghost');
-    singleSearchBtn.classList.remove('btn-primary');
-    clearAllData();
-  }
-
-  function clearAllData() {
-    state.items = [];
-    state.priceData = null;
-    singleItemInput.value = '';
-    hideAutocomplete();
-    hideRelatedItems();
-    renderItems();
-    renderCards(null);
-  }
-
-  // Autocomplete functions
-  function showAutocomplete(query) {
-    if (!query || query.length < 1) {
-      hideAutocomplete();
-      return;
-    }
-
-    const matches = autocompleteData.filter(item => 
-      item.name.toLowerCase().includes(query.toLowerCase())
-    ).slice(0, 8);
-
-    if (matches.length === 0) {
-      hideAutocomplete();
-      return;
-    }
-
-    autocompleteDropdown.innerHTML = matches.map(item => `
-      <div class="autocomplete-item" data-item="${item.name}">
-        <span class="icon">${item.icon}</span>
-        <span class="text">${item.name}</span>
-        <span class="subtext">${item.category}</span>
-      </div>
-    `).join('');
-
-    autocompleteDropdown.style.display = 'block';
-
-    // Add click handlers
-    autocompleteDropdown.querySelectorAll('.autocomplete-item').forEach(item => {
-      item.addEventListener('click', () => {
-        const itemName = item.dataset.item;
-        singleItemInput.value = itemName;
-        hideAutocomplete();
-        updateSearchButton();
-      });
-    });
-  }
-
-  function hideAutocomplete() {
-    autocompleteDropdown.style.display = 'none';
-  }
-
-  function updateSearchButton() {
-    const hasValue = singleItemInput.value.trim().length > 0;
-    searchSingleBtn.disabled = !hasValue;
-  }
-
-  // Related items functions
-  function showRelatedItems(searchItem) {
-    const related = relatedItemsMap[searchItem.toLowerCase()];
-    if (!related || related.length === 0) {
-      hideRelatedItems();
-      return;
-    }
-
-    const relatedData = related.map(itemName => {
-      const item = autocompleteData.find(i => i.name === itemName);
-      return item || { name: itemName, icon: '🛒', category: 'Grocery' };
-    });
-
-    relatedItems.innerHTML = relatedData.map(item => `
-      <div class="related-item-card" data-item="${item.name}">
-        <div class="icon">${item.icon}</div>
-        <div class="name">${item.name}</div>
-        <div class="price">Search prices</div>
-      </div>
-    `).join('');
-
-    relatedItemsSection.style.display = 'block';
-
-    // Add click handlers for related items
-    relatedItems.querySelectorAll('.related-item-card').forEach(card => {
-      card.addEventListener('click', () => {
-        const itemName = card.dataset.item;
-        singleItemInput.value = itemName;
-        updateSearchButton();
-        handleSingleSearch();
-      });
-    });
-  }
-
-  function hideRelatedItems() {
-    relatedItemsSection.style.display = 'none';
   }
 
   function sanitize(text) {
@@ -368,11 +185,6 @@
       
       // Process each platform for this item
       for (const [platformKey, platformName] of Object.entries(platformNames)) {
-        // Only process platforms that have products (backend already filtered)
-        if (!result.platforms || !result.platforms[platformKey]) {
-          continue; // Skip platforms with no results
-        }
-        
         if (!data[platformName]) {
           data[platformName] = { items: [], delivery: 0, total: 0 };
         }
@@ -418,15 +230,29 @@
               total_products_found: product.total_products_found || 0
             });
           }
+        } else {
+          // No products found for this platform
+          const existingItemIndex = data[platformName].items.findIndex(item => item.name === itemName);
+          if (existingItemIndex < 0) {
+            data[platformName].items.push({
+              name: itemName,
+              quantity: `${quantity} ${unit}`,
+              price: 0,
+              product_url: '',
+              rating: 'N/A',
+              brand: '',
+              variant: '',
+              eta: ''
+            });
+          }
         }
-        // Note: If platform has no products, we skip it entirely (backend already filtered)
       }
     }
     
     // Calculate totals and delivery for each platform
     for (const [platformName, platformData] of Object.entries(data)) {
       const subtotal = platformData.items.reduce((sum, item) => sum + item.price, 0);
-      const delivery = (platformName === 'Zepto' || platformName === 'BigBasket' || platformName === 'JioMart') ? 0 : 50; // Quick commerce platforms have free delivery
+      const delivery = (platformName === 'Zepto' || platformName === 'BigBasket' || platformName === 'JioMart') ? 0 : 50; // Zepto, BigBasket, and JioMart have free delivery
       platformData.delivery = delivery;
       platformData.total = subtotal + delivery;
     }
@@ -477,67 +303,153 @@
       compareStatus.textContent = 'Ready to compare across platforms.';
       return;
     }
+    
     const totals = Object.values(priceData).map((p) => p.total);
     const minTotal = Math.min(...totals);
     compareStatus.textContent = 'Real prices from Amazon India, Zepto, BigBasket, and JioMart.';
 
-    for (const [index, platform] of Object.keys(priceData).entries()) {
-      const info = priceData[platform];
-      const card = document.createElement('div');
-      const isBest = info.total === minTotal;
-
-      card.className = 'card' + (isBest ? ' best' : '');
-      card.style.animationDelay = `${index * 0.1}s`;
-      card.innerHTML = `
-        <div class="card-header">
-          <div class="row gap-sm">
-            <h3 style="margin:0">${platform}</h3>
-            ${isBest ? '<span class="badge badge--best">Cheapest</span>' : ''}
-          </div>
-          <div class="price-total${isBest ? ' best' : ''}">₹ ${info.total.toLocaleString('en-IN')}</div>
+    // Create comparison table
+    const table = document.createElement('div');
+    table.className = 'comparison-table';
+    
+    // Get all unique items across platforms
+    const allItems = new Set();
+    Object.values(priceData).forEach(platformData => {
+      platformData.items.forEach(item => {
+        allItems.add(item.name);
+      });
+    });
+    
+    const platforms = Object.keys(priceData);
+    
+    // Create table header
+    let tableHTML = `
+      <div class="table-header">
+        <div class="table-row">
+          <div class="item-column">Item</div>
+          ${platforms.map(platform => `<div class="platform-column">${platform}</div>`).join('')}
+          <div class="best-column">Best Price</div>
         </div>
-        <div class="products-container">
-          ${info.items
-            .map((it) => `
-              <div class="product-card">
-                <div class="product-info">
-                  <div class="product-name">
-                    ${sanitize(it.name)} × ${sanitize(String(it.quantity))}
-                    ${it.unit_price > 0 ? `<span class="price-info-icon" title="Price calculation: Unit price × Quantity = Total price">ℹ️</span>` : ''}
+      </div>
+      <div class="table-body">
+    `;
+    
+    // Create rows for each item
+    Array.from(allItems).forEach(itemName => {
+      const itemPrices = {};
+      const itemDetails = {};
+      
+      // Collect prices and details for this item across all platforms
+      platforms.forEach(platform => {
+        const item = priceData[platform].items.find(i => i.name === itemName);
+        if (item) {
+          itemPrices[platform] = item.price;
+          itemDetails[platform] = item;
+        } else {
+          itemPrices[platform] = null;
+          itemDetails[platform] = null;
+        }
+      });
+      
+      // Find the cheapest price
+      const validPrices = Object.values(itemPrices).filter(p => p !== null && p > 0);
+      const minPrice = validPrices.length > 0 ? Math.min(...validPrices) : null;
+      const cheapestPlatform = minPrice ? Object.keys(itemPrices).find(p => itemPrices[p] === minPrice) : null;
+      
+      // Get item details (use first available platform for item info)
+      const firstAvailableItem = Object.values(itemDetails).find(item => item !== null);
+      const itemQuantity = firstAvailableItem ? firstAvailableItem.quantity : '';
+      
+      tableHTML += `
+        <div class="table-row item-row">
+          <div class="item-column">
+            <div class="item-name">${sanitize(itemName)}</div>
+            <div class="item-quantity">${sanitize(itemQuantity)}</div>
+          </div>
+          ${platforms.map(platform => {
+            const item = itemDetails[platform];
+            const price = itemPrices[platform];
+            const isCheapest = platform === cheapestPlatform && price === minPrice;
+            
+            if (item && price > 0) {
+              return `
+                <div class="platform-column ${isCheapest ? 'cheapest' : ''}">
+                  <div class="price-cell">
+                    <div class="price">₹ ${price.toLocaleString('en-IN')}</div>
+                    ${item.rating && item.rating !== 'N/A' ? `<div class="rating">${item.rating}</div>` : ''}
+                    ${item.product_url ? `<a href="${item.product_url}" target="_blank" class="product-link">View</a>` : ''}
                   </div>
-                  <div class="product-details">
-                    ${it.brand ? `<div class="product-detail-item"><span class="icon">🏷️</span>${sanitize(it.brand)}</div>` : ''}
-                    ${it.variant ? `<div class="product-detail-item"><span class="icon">📦</span>${sanitize(it.variant)}</div>` : ''}
-                    ${it.eta ? `<div class="product-detail-item"><span class="icon">🚚</span>${sanitize(it.eta)}</div>` : ''}
-                    ${it.unit_price > 0 ? `<div class="product-detail-item"><span class="icon">💰</span>₹${it.unit_price.toFixed(2)}/${it.quantity.split(' ')[1] || 'unit'}</div>` : ''}
-                    <div class="match-score">Match: ${it.match_score || 0}/20</div>
-                    <div class="products-found">Found: ${it.total_products_found || 0} products</div>
-                  </div>
-                  ${it.product_url ? `<a href="${it.product_url}" target="_blank" class="product-link">View Product</a>` : ''}
                 </div>
-                <div class="price-info">
-                  <div class="total-price">₹ ${it.price.toLocaleString('en-IN')}</div>
-                  ${it.unit_price > 0 ? `<div class="price-breakdown">🧮 ₹${it.unit_price.toFixed(2)} × ${it.quantity.split(' ')[0] || '1'} = ₹${it.price.toLocaleString('en-IN')}</div>` : ''}
-                  ${it.rating && it.rating !== 'N/A' ? `<div class="rating-stars">${it.rating}</div>` : '<div class="muted">No rating</div>'}
+              `;
+            } else {
+              return `
+                <div class="platform-column unavailable">
+                  <div class="price-cell">
+                    <div class="price">N/A</div>
+                    <div class="unavailable-text">Not available</div>
+                  </div>
+                </div>
+              `;
+            }
+          }).join('')}
+          <div class="best-column">
+            ${cheapestPlatform ? `
+              <div class="best-price">
+                <div class="best-platform">${cheapestPlatform}</div>
+                <div class="best-amount">₹ ${minPrice.toLocaleString('en-IN')}</div>
+              </div>
+            ` : '<div class="no-best">N/A</div>'}
+          </div>
+        </div>
+      `;
+    });
+    
+    // Add totals row
+    tableHTML += `
+        <div class="table-row totals-row">
+          <div class="item-column">
+            <div class="total-label">TOTAL</div>
+            <div class="delivery-note">+ Delivery charges</div>
+          </div>
+          ${platforms.map(platform => {
+            const info = priceData[platform];
+            const isCheapest = info.total === minTotal;
+            return `
+              <div class="platform-column ${isCheapest ? 'cheapest' : ''}">
+                <div class="price-cell">
+                  <div class="price total-price">₹ ${info.total.toLocaleString('en-IN')}</div>
+                  <div class="delivery">Delivery: ₹ ${info.delivery.toLocaleString('en-IN')}</div>
+                  ${isCheapest ? '<div class="cheapest-badge">Cheapest</div>' : ''}
                 </div>
               </div>
-            `)
-            .join('')}
-          <div class="delivery-info">
-            <div class="product-detail-item">
-              <span class="icon">🚚</span>Delivery
-            </div>
-            <div class="price-info">
-              <div class="total-price">₹ ${info.delivery.toLocaleString('en-IN')}</div>
+            `;
+          }).join('')}
+          <div class="best-column">
+            <div class="best-price">
+              <div class="best-platform">${Object.keys(priceData).find(p => priceData[p].total === minTotal)}</div>
+              <div class="best-amount">₹ ${minTotal.toLocaleString('en-IN')}</div>
             </div>
           </div>
         </div>
-        <button class="btn" data-platform="${platform}">View on ${platform}</button>
-      `;
-      const button = card.querySelector('button');
-      button.addEventListener('click', () => redirectToCart(platform));
-      platformCards.appendChild(card);
-    }
+      </div>
+    `;
+    
+    table.innerHTML = tableHTML;
+    platformCards.appendChild(table);
+    
+    // Add platform action buttons below the table
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.className = 'platform-buttons';
+    buttonsContainer.innerHTML = platforms.map(platform => `
+      <button class="btn platform-btn" data-platform="${platform}">View on ${platform}</button>
+    `).join('');
+    
+    // Add event listeners to buttons
+    buttonsContainer.querySelectorAll('.platform-btn').forEach(button => {
+      button.addEventListener('click', () => redirectToCart(button.dataset.platform));
+    });
+    
+    platformCards.appendChild(buttonsContainer);
   }
 
   function redirectToCart(platform) {
@@ -548,9 +460,8 @@
       // For Zepto, redirect to the main site
       url = 'https://www.zeptonow.com/';
     } else if (platform.toLowerCase() === 'bigbasket') {
-      // For BigBasket, redirect to search page with items
-      const searchTerm = state.items.map(item => item.name).join(' ');
-      url = `https://www.bigbasket.com/ps/?q=${encodeURIComponent(searchTerm)}`;
+      // For BigBasket, redirect to the main site
+      url = 'https://www.bigbasket.com/';
     } else if (platform.toLowerCase() === 'jiomart') {
       // For JioMart, redirect to the main site
       url = 'https://www.jiomart.com/';
@@ -638,12 +549,34 @@
     if (!state.items.length) return;
     
     try {
-      compareStatus.innerHTML = '<div class="loading-text"><div class="loading-spinner"></div>Searching for prices...</div>';
+      // Enhanced progress tracking
+      let progressStep = 0;
+      const totalSteps = 4;
+      
+      const updateProgress = (step, message) => {
+        progressStep = step;
+        const percentage = Math.round((step / totalSteps) * 100);
+        compareStatus.innerHTML = `
+          <div class="loading-text">
+            <div class="loading-spinner"></div>
+            ${message} (${percentage}%)
+          </div>
+        `;
+      };
+      
+      updateProgress(1, 'Initializing price search...');
       compareBtn.disabled = true;
       
       // Show loading cards
       renderLoadingCards();
       
+      updateProgress(2, 'Searching Amazon...');
+      await new Promise(resolve => setTimeout(resolve, 100)); // Small delay for visual feedback
+      
+      updateProgress(3, 'Searching other platforms...');
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      updateProgress(4, 'Processing results...');
       const result = await searchPricesAPI(state.items);
       
       if (result.success) {
@@ -686,58 +619,16 @@
     }
   }
 
-  // Single search handler
-  async function handleSingleSearch() {
-    const itemName = singleItemInput.value.trim();
-    if (!itemName) {
-      showToast('Please enter an item to search.');
-      return;
-    }
-
-    try {
-      showToast('Searching for prices...');
-      searchSingleBtn.disabled = true;
-      searchSingleBtn.innerHTML = '<span class="loading-spinner"></span>Searching...';
-      
-      // Create a single item for the search
-      const singleItem = {
-        item_name: itemName,
-        quantity: '1',
-        unit: 'pieces'
-      };
-
-      // Show loading cards
-      renderLoadingCards();
-      
-      const result = await searchPricesAPI([singleItem]);
-      
-      if (result.success) {
-        const priceData = processPriceData(result.results);
-        renderCards(priceData);
-        showRelatedItems(itemName);
-        showToast(`Found prices for ${itemName}!`);
-      } else {
-        showToast('Failed to find prices. Please try again.');
-        renderCards(null);
-      }
-    } catch (error) {
-      console.error('Error searching prices:', error);
-      showToast('Error searching prices. Please try again.');
-      renderCards(null);
-    } finally {
-      searchSingleBtn.disabled = false;
-      searchSingleBtn.innerHTML = '<span class="btn-text">Search Prices</span><span class="btn-icon">🔍</span>';
-    }
-  }
-
   function handleReset() {
     textArea.value = '';
     imageInput.value = '';
-    clearAllData();
+    state.items = [];
+    state.priceData = null;
+    renderItems();
+    renderCards(null);
     showToast('Cleared.');
   }
 
-  // Event listeners
   parseTextBtn.addEventListener('click', handleParseText);
   clearTextBtn.addEventListener('click', handleReset);
   parseImageBtn.addEventListener('click', handleParseImage);
@@ -745,48 +636,6 @@
   sampleBtn.addEventListener('click', handleSample);
   resetBtn.addEventListener('click', handleReset);
 
-  // Single search event listeners
-  singleSearchBtn.addEventListener('click', switchToSingleMode);
-  bulkSearchBtn.addEventListener('click', switchToBulkMode);
-  searchSingleBtn.addEventListener('click', handleSingleSearch);
-
-  // Autocomplete event listeners
-  singleItemInput.addEventListener('input', (e) => {
-    const query = e.target.value;
-    showAutocomplete(query);
-    updateSearchButton();
-  });
-
-  singleItemInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (!searchSingleBtn.disabled) {
-        handleSingleSearch();
-      }
-    } else if (e.key === 'Escape') {
-      hideAutocomplete();
-    }
-  });
-
-  // Hide autocomplete when clicking outside
-  document.addEventListener('click', (e) => {
-    if (!singleItemInput.contains(e.target) && !autocompleteDropdown.contains(e.target)) {
-      hideAutocomplete();
-    }
-  });
-
-  // Suggestion tag event listeners
-  document.querySelectorAll('.suggestion-tag').forEach(tag => {
-    tag.addEventListener('click', () => {
-      const itemName = tag.dataset.item;
-      singleItemInput.value = itemName;
-      updateSearchButton();
-      hideAutocomplete();
-    });
-  });
-
-  // Initialize
-  switchToSingleMode();
   renderItems();
   renderCards(null);
 })();

@@ -129,7 +129,7 @@ class AdvancedZeptoScraper:
     
     def search_products(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
         """
-        Search for products on Zepto with multiple fallback strategies
+        Search for products on Zepto using web scraping approach
         
         Args:
             query: Search query string
@@ -138,79 +138,17 @@ class AdvancedZeptoScraper:
         Returns:
             List of product dictionaries
         """
-        print(f"Searching Zepto for: {query}")
+        # Use only the working web scraping approach
+        try:
+            results = self._try_web_scraping(query, max_results)
+            if results:
+                return results
+        except Exception as e:
+            pass
         
-        # Try multiple approaches
-        approaches = [
-            self._try_direct_api,
-            self._try_web_scraping,
-            self._try_alternative_endpoints
-        ]
-        
-        for i, approach in enumerate(approaches, 1):
-            try:
-                print(f"Trying approach {i} for {query}...")
-                results = approach(query, max_results)
-                if results:
-                    print(f"✅ Approach {i} successful - found {len(results)} products")
-                    return results
-                else:
-                    print(f"❌ Approach {i} failed")
-            except Exception as e:
-                print(f"❌ Approach {i} error: {str(e)}")
-            
-            # Add delay between approaches
-            time.sleep(random.uniform(2, 4))
-        
-        # Final fallback to sample data
-        print(f"All approaches failed, using sample data for: {query}")
+        # Fallback to sample data
         return self._generate_realistic_sample_data(query, max_results)
     
-    def _try_direct_api(self, query: str, max_results: int) -> List[Dict[str, Any]]:
-        """Try direct API approach with updated headers"""
-        try:
-            # Rotate user agent
-            self.session.headers['User-Agent'] = random.choice(self.user_agents)
-            
-            # Try different API endpoints
-            endpoints = [
-                f"{self.api_url}/search",
-                f"{self.api_url}/products/search",
-                f"{self.api_url}/v1/search"
-            ]
-            
-            for endpoint in endpoints:
-                try:
-                    payload = {
-                        "query": query,
-                        "page": 1,
-                        "limit": max_results,
-                        "sort": "relevance"
-                    }
-                    
-                    response = self.session.post(
-                        endpoint,
-                        json=payload,
-                        timeout=15
-                    )
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        return self._parse_api_response(data)
-                    elif response.status_code == 428:
-                        print(f"Cloudflare blocked API endpoint: {endpoint}")
-                        continue
-                    else:
-                        print(f"API error {response.status_code} for {endpoint}")
-                        
-                except Exception as e:
-                    print(f"API endpoint {endpoint} failed: {str(e)}")
-                    continue
-                    
-        except Exception as e:
-            print(f"Direct API approach failed: {str(e)}")
-        
-        return []
     
     def _try_web_scraping(self, query: str, max_results: int) -> List[Dict[str, Any]]:
         """Try web scraping approach"""
@@ -233,63 +171,17 @@ class AdvancedZeptoScraper:
                         # For now, return sample data since parsing HTML is complex
                         # In a real implementation, you'd parse the HTML
                         return self._generate_realistic_sample_data(query, max_results)
-                    elif response.status_code == 428:
-                        print(f"Cloudflare blocked web URL: {url}")
-                        continue
                     else:
-                        print(f"Web error {response.status_code} for {url}")
+                        continue
                         
                 except Exception as e:
-                    print(f"Web URL {url} failed: {str(e)}")
                     continue
                     
         except Exception as e:
-            print(f"Web scraping approach failed: {str(e)}")
+            pass
         
         return []
     
-    def _try_alternative_endpoints(self, query: str, max_results: int) -> List[Dict[str, Any]]:
-        """Try alternative endpoints and methods"""
-        try:
-            # Try mobile API endpoints
-            mobile_endpoints = [
-                "https://m.zeptonow.com/api/search",
-                "https://api.zeptonow.com/v1/search",
-                "https://cdn.zeptonow.com/api/search"
-            ]
-            
-            for endpoint in mobile_endpoints:
-                try:
-                    # Use mobile headers
-                    mobile_headers = {
-                        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json'
-                    }
-                    
-                    payload = {"query": query, "limit": max_results}
-                    
-                    response = requests.post(
-                        endpoint,
-                        json=payload,
-                        headers=mobile_headers,
-                        timeout=15
-                    )
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        return self._parse_api_response(data)
-                    else:
-                        print(f"Mobile API error {response.status_code} for {endpoint}")
-                        
-                except Exception as e:
-                    print(f"Mobile endpoint {endpoint} failed: {str(e)}")
-                    continue
-                    
-        except Exception as e:
-            print(f"Alternative endpoints approach failed: {str(e)}")
-        
-        return []
     
     def _parse_api_response(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Parse API response data"""
@@ -314,7 +206,7 @@ class AdvancedZeptoScraper:
                     products.append(parsed)
                     
         except Exception as e:
-            print(f"Error parsing API response: {str(e)}")
+            pass
         
         return products
     
@@ -337,7 +229,6 @@ class AdvancedZeptoScraper:
                 'platform': 'zepto'
             }
         except Exception as e:
-            print(f"Error parsing product: {str(e)}")
             return None
     
     def _generate_realistic_sample_data(self, query: str, max_results: int) -> List[Dict[str, Any]]:

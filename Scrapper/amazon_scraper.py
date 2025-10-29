@@ -33,7 +33,7 @@ class AmazonScraper:
     def setup_logging(self):
         """Setup logging configuration."""
         logging.basicConfig(
-            level=logging.INFO,
+            level=logging.WARNING,
             format='%(asctime)s - %(levelname)s - %(message)s'
         )
         self.logger = logging.getLogger(__name__)
@@ -72,11 +72,9 @@ class AmazonScraper:
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                self.logger.info(f"Fetching page (attempt {attempt + 1}): {url}")
+                # Fetching page
                 
-                # Add random delay to be respectful
-                delay = random.uniform(2, 5) + (attempt * 2)  # Increase delay with retries
-                time.sleep(delay)
+                # Removed delay for faster processing
                 
                 # Update referer for subsequent requests
                 if attempt > 0:
@@ -90,7 +88,6 @@ class AmazonScraper:
                 
                 # Check for specific error codes
                 if response.status_code == 503:
-                    self.logger.warning(f"503 Service Unavailable (attempt {attempt + 1})")
                     if attempt < max_retries - 1:
                         continue
                     else:
@@ -100,14 +97,11 @@ class AmazonScraper:
                 
                 # Check if we got a valid HTML response
                 if 'html' in response.headers.get('content-type', '').lower():
-                    self.logger.info("Page fetched successfully")
                     return response.text
                 else:
-                    self.logger.warning(f"Non-HTML response received: {response.headers.get('content-type')}")
                     return None
                 
             except Exception as e:
-                self.logger.error(f"Error fetching page (attempt {attempt + 1}): {e}")
                 if attempt == max_retries - 1:
                     return None
                 continue
@@ -141,11 +135,9 @@ class AmazonScraper:
                 containers = soup.select(selector)
                 if containers:
                     product_containers = containers
-                    self.logger.info(f"Found {len(containers)} products using selector: {selector}")
                     break
             
             if not product_containers:
-                self.logger.warning("No product containers found")
                 return products
             
             for container in product_containers:
@@ -154,13 +146,12 @@ class AmazonScraper:
                     if product:
                         products.append(product)
                 except Exception as e:
-                    self.logger.warning(f"Error extracting product info: {e}")
                     continue
             
-            self.logger.info(f"Successfully parsed {len(products)} products")
+            # Successfully parsed products
             
         except Exception as e:
-            self.logger.error(f"Error parsing HTML: {e}")
+            pass
         
         return products
     
@@ -267,7 +258,6 @@ class AmazonScraper:
             }
             
         except Exception as e:
-            self.logger.warning(f"Error extracting product info: {e}")
             return None
     
     def _search_products_data_only(self, item_name: str, max_results: int = 5) -> List[Dict[str, Any]]:
@@ -284,28 +274,23 @@ class AmazonScraper:
         try:
             # Build the search URL
             search_url = build_amazon_url(item_name)
-            self.logger.info(f"Searching Amazon for: {item_name}")
-            self.logger.info(f"URL: {search_url}")
             
             # Fetch the HTML content
             html_content = self.fetch_page(search_url)
             
             if not html_content:
-                self.logger.warning("No HTML content received from Amazon")
                 return []
             
             # Parse the HTML and extract product information
             products = self.parse_results(html_content)
             
             if not products:
-                self.logger.warning("No products found in the HTML")
                 return []
             
-            self.logger.info(f"Found {len(products)} products")
+            # Found products
             return products
             
         except Exception as e:
-            self.logger.error(f"Error searching Amazon products: {e}")
             return []
     
     def save_results(self, data: List[Dict[str, Any]], output_dir: str = "output"):
@@ -328,8 +313,6 @@ class AmazonScraper:
             with open(json_path, 'w', encoding='utf-8') as f:
                 json.dump(formatted_data, f, indent=2, ensure_ascii=False)
             
-            self.logger.info(f"Data saved to JSON: {json_path}")
-            
             # Save as CSV
             if formatted_data:
                 csv_path = os.path.join(output_dir, "data.csv")
@@ -337,15 +320,34 @@ class AmazonScraper:
                     writer = csv.DictWriter(f, fieldnames=formatted_data[0].keys())
                     writer.writeheader()
                     writer.writerows(formatted_data)
-                
-                self.logger.info(f"Data saved to CSV: {csv_path}")
-            
-            self.logger.info(f"Successfully saved {len(formatted_data)} products")
             
         except Exception as e:
-            self.logger.error(f"Error saving results: {e}")
-            raise
+            pass
     
+    def search_products(self, item_name: str, max_results: int = 10) -> List[Dict[str, Any]]:
+        """
+        Search for products on Amazon (wrapper for price scraper compatibility)
+        
+        Args:
+            item_name: Name of the item to search for
+            max_results: Maximum number of results to return
+            
+        Returns:
+            List of product dictionaries
+        """
+        try:
+            print(f"🔍 Amazon: Searching for '{item_name}'...")
+            results = self._search_products_data_only(item_name, max_results)
+            if results:
+                print(f"✅ Amazon: Found {len(results)} products")
+                return results
+            else:
+                print(f"❌ Amazon: No products found for '{item_name}'")
+                return []
+        except Exception as e:
+            print(f"❌ Amazon: Error searching '{item_name}': {e}")
+            return []
+
     def scrape_amazon(self, item_name: str, output_dir: str = "output") -> List[Dict[str, Any]]:
         """
         Main method to scrape Amazon for a given item.
@@ -360,19 +362,15 @@ class AmazonScraper:
         try:
             # Build the Amazon URL
             url = build_amazon_url(item_name)
-            self.logger.info(f"Searching for: {item_name}")
-            self.logger.info(f"URL: {url}")
             
             # Fetch the page
             html = self.fetch_page(url)
             if not html:
-                self.logger.error("Failed to fetch page content")
                 return []
             
             # Parse the results
             products = self.parse_results(html)
             if not products:
-                self.logger.warning("No products found")
                 return []
             
             # Save the results
@@ -381,8 +379,7 @@ class AmazonScraper:
             return products
             
         except Exception as e:
-            self.logger.error(f"Error during scraping: {e}")
-            raise
+            return []
         finally:
             # Clean up session
             if self.session:

@@ -3,97 +3,267 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Btech Project</title>
+    <title>SmartShop Vision - Smart Grocery Price Comparison</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <header class="app-header">
       <div class="container header-inner">
-        <h1 class="app-title">Btech Project</h1>
+        <div class="brand">
+          <div class="logo">🛒</div>
+          <h1 class="app-title">SmartShop Vision</h1>
+          <span class="tagline">Smart Grocery Shopping</span>
+        </div>
         <nav class="header-actions">
-          <button id="resetBtn" class="btn btn-ghost" aria-label="Reset inputs">Reset</button>
-          <a class="btn btn-ghost" href="#about" aria-label="About">About</a>
+          <div class="pincode-section">
+            <span id="pincode-display" class="pincode-display">📍 No location set</span>
+            <button id="change-pincode-btn" class="btn btn-outline">Change Location</button>
+          </div>
+          <a href="single-search.html" class="btn btn-primary" aria-label="Single Item Search">🔍 Single Search</a>
+          <a href="bulk-search.html" class="btn btn-ghost" aria-label="Bulk Search">📝 Bulk Search</a>
         </nav>
       </div>
     </header>
 
     <main class="container">
-      <section class="panel" aria-labelledby="input-title">
-        <div class="panel-header">
-          <h2 id="input-title">Input your grocery list</h2>
-        </div>
-        <div class="grid-2">
-          <div class="stack">
-            <label for="groceryText" class="label">Type or paste items (one per line)</label>
-            <textarea id="groceryText" class="input input-textarea" placeholder="e.g.
-1 kg tomatoes
-2 bread
-milk 1L
-eggs 12"></textarea>
-            <div class="row gap-sm">
-              <button id="parseTextBtn" class="btn">Preview items</button>
-              <button id="clearTextBtn" class="btn btn-ghost">Clear</button>
-            </div>
+      <!-- Welcome Section -->
+      <section class="panel welcome-panel">
+        <div class="welcome-content">
+          <h1 class="welcome-title">Welcome to SmartShop Vision</h1>
+          <p class="welcome-subtitle">Your intelligent grocery shopping assistant</p>
+          <p class="welcome-description">
+            Compare prices across Amazon, Zepto, BigBasket, and JioMart with our advanced OCR technology and smart search features.
+          </p>
+          
+          <div class="welcome-actions">
+            <a href="single-search.html" class="btn btn-primary welcome-btn">
+              <span class="btn-icon">🔍</span>
+              <span class="btn-text">Search Single Item</span>
+              <span class="btn-desc">Find the best price for any grocery item</span>
+            </a>
+            <a href="bulk-search.html" class="btn btn-ghost welcome-btn">
+              <span class="btn-icon">📝</span>
+              <span class="btn-text">Bulk Search</span>
+              <span class="btn-desc">Upload image or type multiple items</span>
+            </a>
           </div>
-          <div class="stack">
-            <label for="imageInput" class="label">Or upload an image of your list</label>
-            <input id="imageInput" type="file" accept="image/*" class="input" />
-            <div class="row gap-sm">
-              <button id="parseImageBtn" class="btn">Parse image</button>
-              <span class="muted">Upload a handwritten grocery list image.</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel" aria-labelledby="preview-title">
-        <div class="panel-header">
-          <h2 id="preview-title">Items preview</h2>
-          <div class="row gap-sm">
-            <button id="compareBtn" class="btn" disabled>Compare prices</button>
-            <button id="sampleBtn" class="btn btn-ghost">Load sample list</button>
-          </div>
-        </div>
-        <ul id="itemsList" class="items-list" aria-live="polite"></ul>
-      </section>
-
-      <section class="panel" aria-labelledby="compare-title">
-        <div class="panel-header">
-          <h2 id="compare-title">Compare platforms</h2>
-          <span id="compareStatus" class="muted">Add items above, then compare.</span>
-        </div>
-        <div class="cards" id="platformCards">
-          <!-- Cards rendered by app.js -->
         </div>
       </section>
 
       <section id="about" class="panel" aria-labelledby="about-title">
         <div class="panel-header">
-          <h2 id="about-title">About this project</h2>
+          <h2 id="about-title">About SmartShop Vision</h2>
         </div>
-        <p class="muted">
-          Complete grocery OCR pipeline that parses handwritten grocery lists using advanced AI preprocessing and compares prices from Amazon India, Blinkit, Zepto, and BigBasket.
-          <br><br>
-          <strong>Advanced Preprocessing:</strong> Line removal, handwriting enhancement, adaptive thresholding, noise removal, deskewing, and multi-version OCR testing.
-          <br><br>
-          <strong>Price Comparison:</strong> Get real-time prices from Amazon India, Blinkit, Zepto, and BigBasket to find the best deals for your grocery list.
-          <br><br>
-          Upload an image or type your grocery list to get started.
-        </p>
+        <div class="about-content">
+          <p class="muted">
+            <strong>SmartShop Vision</strong> is an intelligent grocery shopping assistant that combines advanced OCR technology with real-time price comparison across India's top e-commerce platforms.
+          </p>
+          <div class="features-grid">
+            <div class="feature-card">
+              <div class="feature-icon">📱</div>
+              <h4>OCR Technology</h4>
+              <p>Upload handwritten grocery lists and let our AI extract items automatically</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon">💰</div>
+              <h4>Price Comparison</h4>
+              <p>Compare real-time prices from Amazon, Zepto, BigBasket, and JioMart</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon">🔍</div>
+              <h4>Smart Search</h4>
+              <p>Intelligent autocomplete and related item suggestions</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon">⚡</div>
+              <h4>Fast Results</h4>
+              <p>Optimized scraping for quick and accurate price updates</p>
+            </div>
+          </div>
+        </div>
       </section>
     </main>
 
     <footer class="app-footer">
       <div class="container">
-        <span>© <span id="year"></span> Btech Project</span>
+        <div class="footer-content">
+          <div class="footer-brand">
+            <span class="logo">🛒</span>
+            <span>SmartShop Vision</span>
+          </div>
+          <span>© <span id="year"></span> Smart Grocery Shopping Made Easy</span>
+        </div>
       </div>
     </footer>
 
-    <div id="toast" role="status" aria-live="polite" class="toast" hidden></div>
+    <!-- Pincode Modal -->
+    <div id="pincode-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>📍 Set Your Location</h3>
+          <span class="close">&times;</span>
+        </div>
+        <div class="modal-body">
+          <p>Enter your pincode to get accurate delivery options and prices from quick commerce platforms.</p>
+          <div class="form-group">
+            <label for="pincode-input">Pincode (6 digits):</label>
+            <input type="text" id="pincode-input" maxlength="6" placeholder="e.g., 110001" />
+            <div id="pincode-error" class="error-message"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="save-pincode-btn" class="btn btn-primary">Save Location</button>
+          <button id="cancel-pincode-btn" class="btn btn-ghost">Cancel</button>
+        </div>
+      </div>
+    </div>
 
-    <script src="app.js"></script>
+    <script>
+      document.getElementById('year').textContent = String(new Date().getFullYear());
+
+      // Pincode management
+      let currentPincode = null;
+
+      // Check pincode on page load
+      document.addEventListener('DOMContentLoaded', function() {
+        checkPincode();
+      });
+
+      async function checkPincode() {
+        try {
+          const response = await fetch('/api/pincode');
+          const data = await response.json();
+          
+          if (data.pincode) {
+            currentPincode = data.pincode;
+            updatePincodeDisplay(data.pincode);
+          } else {
+            // First time user - show pincode modal
+            showPincodeModal(true);
+          }
+        } catch (error) {
+          console.error('Error checking pincode:', error);
+        }
+      }
+
+      function updatePincodeDisplay(pincode) {
+        const display = document.getElementById('pincode-display');
+        if (pincode) {
+          display.textContent = `📍 ${pincode}`;
+          display.classList.add('pincode-set');
+        } else {
+          display.textContent = '📍 No location set';
+          display.classList.remove('pincode-set');
+        }
+      }
+
+      function showPincodeModal(isFirstTime = false) {
+        const modal = document.getElementById('pincode-modal');
+        const input = document.getElementById('pincode-input');
+        const error = document.getElementById('pincode-error');
+        const cancelBtn = document.getElementById('cancel-pincode-btn');
+        
+        // Hide cancel button for first time users
+        if (isFirstTime) {
+          cancelBtn.style.display = 'none';
+          modal.querySelector('.modal-body p').textContent = 
+            'Welcome! Please enter your pincode to get started with accurate delivery options and prices.';
+        } else {
+          cancelBtn.style.display = 'inline-block';
+          modal.querySelector('.modal-body p').textContent = 
+            'Enter your pincode to get accurate delivery options and prices from quick commerce platforms.';
+        }
+        
+        input.value = currentPincode || '';
+        error.textContent = '';
+        modal.style.display = 'block';
+        input.focus();
+      }
+
+      function hidePincodeModal() {
+        document.getElementById('pincode-modal').style.display = 'none';
+      }
+
+      async function savePincode() {
+        const input = document.getElementById('pincode-input');
+        const error = document.getElementById('pincode-error');
+        const pincode = input.value.trim();
+
+        // Validate pincode
+        if (!pincode) {
+          error.textContent = 'Please enter a pincode';
+          return;
+        }
+
+        if (pincode.length !== 6 || !/^\d{6}$/.test(pincode)) {
+          error.textContent = 'Please enter a valid 6-digit pincode';
+          return;
+        }
+
+        try {
+          const response = await fetch('/api/pincode', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ pincode: pincode })
+          });
+
+          const data = await response.json();
+
+          if (response.ok && data.success) {
+            currentPincode = pincode;
+            updatePincodeDisplay(pincode);
+            hidePincodeModal();
+            
+            // Show success message
+            showNotification('✅ Location saved successfully!', 'success');
+          } else {
+            error.textContent = data.error || 'Failed to save pincode';
+          }
+        } catch (error) {
+          console.error('Error saving pincode:', error);
+          error.textContent = 'Network error. Please try again.';
+        }
+      }
+
+      function showNotification(message, type = 'info') {
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = `notification notification-${type}`;
+        notification.textContent = message;
+        
+        // Add to page
+        document.body.appendChild(notification);
+        
+        // Show notification
+        setTimeout(() => notification.classList.add('show'), 100);
+        
+        // Hide and remove notification
+        setTimeout(() => {
+          notification.classList.remove('show');
+          setTimeout(() => document.body.removeChild(notification), 300);
+        }, 3000);
+      }
+
+      // Event listeners
+      document.getElementById('change-pincode-btn').addEventListener('click', () => showPincodeModal(false));
+      document.getElementById('save-pincode-btn').addEventListener('click', savePincode);
+      document.getElementById('cancel-pincode-btn').addEventListener('click', hidePincodeModal);
+      
+      // Close modal when clicking outside or on close button
+      document.querySelector('.close').addEventListener('click', hidePincodeModal);
+      document.getElementById('pincode-modal').addEventListener('click', function(e) {
+        if (e.target === this) hidePincodeModal();
+      });
+
+      // Enter key to save pincode
+      document.getElementById('pincode-input').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') savePincode();
+      });
+    </script>
   </body>
 </html>
