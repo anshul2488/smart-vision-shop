@@ -14,7 +14,7 @@ This is a **complete grocery price comparison system** that takes handwritten gr
 ## 🚀 **Quick Start**
 
 ### **Prerequisites**
-- Python 3.8 or higher
+- Python 3.10 or 3.11
 - pip (Python package manager)
 - Git (for cloning the repository)
 
