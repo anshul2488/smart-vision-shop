@@ -26,6 +26,10 @@ class HandwrittenOCRIntegration:
     """Integration class for handwritten OCR model in Flask app"""
     
     def __init__(self, model_path: str = "models/best_model.pth"):
+        """
+        Initialize handwritten OCR with trained model.
+        Uses best_model.pth from train_handwritten_ocr.py training.
+        """
         self.model_path = model_path
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model = None

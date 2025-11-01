@@ -193,7 +193,6 @@ class OCRProcessor:
             
             # Technique 2: Extract text with spatial grouping
             if item_groups:
-                print(f"📦 Detected {len(item_groups)} layout boxes using CV")
                 results = self._extract_with_spatial_grouping(image, item_groups)
             else:
                 # Fallback to standard extraction
@@ -661,7 +660,7 @@ class TextCorrector:
 class LLMProcessor:
     """LLM processor for text refinement and grocery item extraction"""
     
-    def __init__(self, model_name: str = "microsoft/DialoGPT-medium"):
+    def __init__(self, model_name: str = None):
         self.model_name = model_name
         self.device = device
         
@@ -682,13 +681,14 @@ class LLMProcessor:
             'surf', 'excel', 'harpic', 'dettol', 'scotch', 'brite', 'colin', 'goodknight'
         }
         
-        # Skip LLM initialization - we use pure OCR extraction only
-        # No need to load tokenizer/model/generator since we don't use LLM
+        # Initialize LLM for text processing - use lightweight model or disable
         self.generator = None
         self.tokenizer = None
         self.model = None
         
-        print("✅ LLMProcessor initialized (LLM disabled, using pure OCR extraction)")
+        # Skip LLM for now - it's too slow for real-time training
+        # If you want to enable it, use a small local model
+        print("✅ LLMProcessor initialized (LLM disabled for speed, using pure OCR extraction)")
     
     def _intelligent_item_splitting(self, text: str) -> List[str]:
         """Intelligently split concatenated items using CV and semantic analysis"""
@@ -787,7 +787,8 @@ class LLMProcessor:
         # Final fallback: if no items found, return at least one item with the cleaned text
         if not items:
             # Try one more time with aggressive splitting
-            segments = re.split(r'[~=_]+\s*[Uu]?\s*', cleaned_text)
+            segments = re.split(r'[~=_]+\s*[Uu]?\s*', cleaned)
+            seen_items = set()
             for segment in segments:
                 segment = segment.strip()
                 if len(segment) > 3:
@@ -872,17 +873,35 @@ class LLMProcessor:
         return items
     
     def process_text(self, text: str) -> Dict:
-        """Process text for grocery item extraction - PURE OCR EXTRACTION, NO LLM"""
-        print(f"🔍 Pure OCR extraction (NO LLM): {text[:150]}...")
+        """Process text for grocery item extraction with LLM if available"""
+        # Try LLM first if available
+        if self.generator is not None:
+            try:
+                # Use LLM for better extraction
+                prompt = f"Extract grocery items from this text and format as 'item_name, quantity, unit': {text}"
+                llm_output = self.generator(prompt, max_length=200, num_return_sequences=1, temperature=0.7, do_sample=True)
+                
+                if llm_output and len(llm_output) > 0:
+                    generated_text = llm_output[0].get('generated_text', text)
+                    items = self._extract_items_from_llm_output(generated_text)
+                    
+                    if items:
+                        return {
+                            'original_text': text,
+                            'llm_output': generated_text,
+                            'extracted_items': items,
+                            'confidence': 0.85
+                        }
+            except Exception as e:
+                # Fallback to simple extraction on LLM error
+                pass
         
-        # PURE OCR EXTRACTION - NO LLM AT ALL
+        # Fallback to simple extraction
         items = self._extract_items_simple(text)
-        
-        print(f"✅ OCR extraction found {len(items)} items")
         
         return {
             'original_text': text,
-            'llm_output': 'OCR extraction only (LLM disabled)',
+            'llm_output': text if self.generator is None else 'LLM failed, using OCR extraction',
             'extracted_items': items,
             'confidence': 0.75 if items else 0.5
         }
@@ -1476,7 +1495,7 @@ class GroceryOCRLoss(nn.Module):
         
     def forward(self, predictions, targets):
         # predictions is a list of dictionaries, targets is a list of dictionaries
-        total_loss = 0.0
+        total_loss = torch.tensor(0.0, dtype=torch.float32)
         
         for pred, target in zip(predictions, targets):
             # Calculate text similarity loss
@@ -1487,10 +1506,10 @@ class GroceryOCRLoss(nn.Module):
             
             # Combine losses
             sample_loss = text_loss + 0.5 * item_loss
-            total_loss += sample_loss
+            total_loss = total_loss + sample_loss
         
         # Average loss across batch
-        return total_loss / len(predictions) if predictions else torch.tensor(0.0)
+        return total_loss / len(predictions) if predictions else torch.tensor(0.0, dtype=torch.float32)
     
     def _text_similarity_loss(self, pred_text, target_text):
         """Calculate text similarity loss"""
@@ -1502,12 +1521,13 @@ class GroceryOCRLoss(nn.Module):
         union = len(pred_chars.union(target_chars))
         
         similarity = intersection / union if union > 0 else 0
-        return torch.tensor(1 - similarity, requires_grad=True)
+        loss_value = torch.tensor(1 - similarity, dtype=torch.float32)
+        return loss_value
     
     def _item_extraction_loss(self, pred_items, target_items):
         """Calculate item extraction loss"""
         if not pred_items or not target_items:
-            return torch.tensor(1.0, requires_grad=True)
+            return torch.tensor(1.0, dtype=torch.float32)
         
         # Simple item matching loss
         pred_names = [item.get('item_name', '') for item in pred_items]
@@ -1521,7 +1541,8 @@ class GroceryOCRLoss(nn.Module):
                     break
         
         accuracy = matches / max(len(pred_items), len(target_items))
-        return torch.tensor(1 - accuracy, requires_grad=True)
+        loss_value = torch.tensor(1 - accuracy, dtype=torch.float32)
+        return loss_value
 
 class GroceryOCRModel(nn.Module):
     """Main OCR model with LLM integration"""
@@ -1578,7 +1599,7 @@ class GroceryOCRModel(nn.Module):
 class GroceryOCRTrainer:
     """Main trainer class"""
     
-    def __init__(self, dataset_path: str = r"C:\Users\Anshul Shinde\Desktop\SEM 7\BTECH\dataset\train_data"):
+    def __init__(self, dataset_path: str = r"C:\Users\Anshul Shinde\Desktop\SEM 7\BTECH\project_pipeline\dataset\train_data"):
         self.dataset_path = dataset_path
         self.device = device
         
@@ -1589,13 +1610,14 @@ class GroceryOCRTrainer:
         # Initialize model
         self.model = GroceryOCRModel(self.ocr_processor, self.llm_processor).to(self.device)
         
-        # Initialize loss and optimizer
+        # Initialize loss and optimizer with better settings
         self.criterion = GroceryOCRLoss()
-        self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
+        self.optimizer = optim.AdamW(self.model.parameters(), lr=0.001, weight_decay=1e-4)
+        self.scheduler = None  # Will be initialized in train() method
         
         # Initialize dataset
         self.dataset = GroceryOCRDataset(dataset_path, self.ocr_processor, self.llm_processor)
-        self.dataloader = DataLoader(self.dataset, batch_size=1, shuffle=True, collate_fn=custom_collate_fn)
+        self.dataloader = DataLoader(self.dataset, batch_size=16, shuffle=True, collate_fn=custom_collate_fn, num_workers=0)
         
         print(f"✅ Model initialized on {self.device}")
         print(f"📊 Dataset size: {len(self.dataset)}")
@@ -1603,12 +1625,22 @@ class GroceryOCRTrainer:
     def train(self, epochs: int = 10):
         """Train the model"""
         print(f"🚀 Starting training for {epochs} epochs...")
+        print(f"📊 Dataset size: {len(self.dataset)}")
+        print(f"🔄 Batch size: {self.dataloader.batch_size}")
+        
+        # Initialize scheduler if not already done
+        if self.scheduler is None:
+            self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
+                self.optimizer, T_max=epochs, eta_min=1e-6
+            )
         
         self.model.train()
+        best_loss = float('inf')
         
         for epoch in range(epochs):
             epoch_loss = 0.0
             epoch_accuracy = 0.0
+            num_batches = 0
             
             for batch_idx, batch_data in enumerate(self.dataloader):
                 # batch_data is already a list from custom_collate_fn
@@ -1619,23 +1651,46 @@ class GroceryOCRTrainer:
                 # Calculate loss
                 loss = self.criterion(predictions, batch_data)
                 
-                # Backward pass
-                loss.backward()
-                self.optimizer.step()
+                # Backward pass (only if loss has a computational graph)
+                if loss.grad_fn is not None:
+                    loss.backward()
+                    # Gradient clipping (like handwritten model)
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                    # Only step if there are parameters that require gradients and have gradients
+                    if any(p.grad is not None for p in self.model.parameters() if p.requires_grad):
+                        self.optimizer.step()
+                else:
+                    # Debug: Why no gradients?
+                    if batch_idx == 0:
+                        print(f"⚠️  Warning: Loss has no computational graph (grad_fn: {loss.grad_fn})")
                 
                 # Calculate accuracy
                 batch_accuracy = sum(data['accuracy'] for data in batch_data) / len(batch_data)
                 
                 epoch_loss += loss.item()
                 epoch_accuracy += batch_accuracy
+                num_batches += 1
                 
-                if batch_idx % 10 == 0:
-                    print(f"Epoch {epoch+1}/{epochs}, Batch {batch_idx}, Loss: {loss.item():.4f}, Accuracy: {batch_accuracy:.4f}")
+                # Print progress every 50 batches (less verbose)
+                if batch_idx % 50 == 0:
+                    print(f"  Batch {batch_idx}/{len(self.dataloader)}, Loss: {loss.item():.4f}, Accuracy: {batch_accuracy:.4f}")
             
-            avg_loss = epoch_loss / len(self.dataloader)
-            avg_accuracy = epoch_accuracy / len(self.dataloader)
+            # Update learning rate
+            self.scheduler.step()
             
-            print(f"Epoch {epoch+1}/{epochs} - Loss: {avg_loss:.4f}, Accuracy: {avg_accuracy:.4f}")
+            avg_loss = epoch_loss / num_batches if num_batches > 0 else 0.0
+            avg_accuracy = epoch_accuracy / num_batches if num_batches > 0 else 0.0
+            
+            # Track best loss
+            if avg_loss < best_loss:
+                best_loss = avg_loss
+            
+            print(f"Epoch {epoch+1}/{epochs} - Loss: {avg_loss:.4f}, Accuracy: {avg_accuracy:.4f}, LR: {self.scheduler.get_last_lr()[0]:.6f}")
+            
+            # Save checkpoint every 5 epochs
+            if (epoch + 1) % 5 == 0:
+                self.save_model()
+                print(f"  💾 Checkpoint saved")
     
     def evaluate(self) -> pd.DataFrame:
         """Evaluate the model and return results as DataFrame"""
@@ -1722,7 +1777,7 @@ def main():
     print()
     
     # Check dataset
-    dataset_path = r"C:\Users\Anshul Shinde\Desktop\SEM 7\BTECH\dataset\train_data"
+    dataset_path = r"C:\Users\Anshul Shinde\Desktop\SEM 7\BTECH\project_pipeline\dataset\train_data"
     if not os.path.exists(dataset_path):
         print(f"❌ Dataset not found at: {dataset_path}")
         return
@@ -1731,8 +1786,9 @@ def main():
         # Initialize trainer
         trainer = GroceryOCRTrainer(dataset_path)
         
-        # Train the model
-        trainer.train(epochs=5)
+        # Skip "training" - just run evaluation (this is not actually training, just OCR processing)
+        print("⚠️  Note: This is not actual neural network training, just OCR processing.")
+        print("⚠️  The 'training' loop is a legacy artifact - the model has no learnable parameters.")
         
         # Evaluate and get results
         df_results = trainer.evaluate()

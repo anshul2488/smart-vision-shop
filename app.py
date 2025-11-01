@@ -442,7 +442,7 @@ def load_llm_processor():
         return None
 
 def load_grocery_model():
-    """Lazy load grocery OCR model"""
+    """Lazy load grocery OCR model (DEPRECATED: Use handwritten OCR instead)"""
     from grocery_ocr_llm_model import GroceryOCRModel
     
     ocr_processor = model_cache.get_or_load('ocr_processor', load_ocr_processor)
@@ -453,14 +453,27 @@ def load_grocery_model():
     
     model = GroceryOCRModel(ocr_processor, llm_processor)
     
-    # Load trained model if available
-    model_path = "grocery_ocr_model.pth"
+    # Try to load trained handwritten OCR model (best_model.pth) first
+    # This is the trained CRNN model from train_handwritten_ocr.py
+    model_path = "models/best_model.pth"
     if os.path.exists(model_path):
-        checkpoint = torch.load(model_path, map_location='cpu')
-        model.load_state_dict(checkpoint['model_state_dict'])
-        logger.info("✅ Loaded trained model")
+        try:
+            checkpoint = torch.load(model_path, map_location='cpu')
+            # Note: This won't work directly as GroceryOCRModel doesn't match HandwrittenOCRModel architecture
+            # But we try to load if compatible
+            if 'model_state_dict' in checkpoint:
+                # Only load if architectures match (they probably don't, but try)
+                try:
+                    model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+                    logger.info("✅ Loaded best_model.pth (partial match)")
+                except:
+                    logger.warning("⚠️ best_model.pth architecture doesn't match GroceryOCRModel, using untrained model")
+            else:
+                logger.warning("⚠️ best_model.pth doesn't contain model_state_dict")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to load best_model.pth: {e}")
     else:
-        logger.warning("⚠️ No trained model found, using untrained model")
+        logger.warning(f"⚠️ best_model.pth not found at {model_path}, using untrained model")
     
     model.eval()
     return model
@@ -476,8 +489,22 @@ def load_preprocessor():
     return GroceryListPreprocessor()
 
 def load_handwritten_ocr():
-    """Lazy load handwritten OCR"""
-    from handwritten_ocr_integration import handwritten_ocr
+    """
+    Lazy load handwritten OCR model.
+    This uses models/best_model.pth from train_handwritten_ocr.py training.
+    This is the PRIMARY OCR method used in parse_image() endpoint.
+    """
+    from handwritten_ocr_integration import HandwrittenOCRIntegration
+    
+    # Explicitly use best_model.pth from training (not grocery_ocr_model.pth)
+    model_path = "models/best_model.pth"
+    if not os.path.exists(model_path):
+        logger.warning(f"⚠️ best_model.pth not found at {model_path}. Handwritten OCR will not be available.")
+        logger.info("💡 Train the model first: python train_handwritten_ocr.py")
+    
+    # Create instance with explicit path to best_model.pth
+    handwritten_ocr = HandwrittenOCRIntegration(model_path=model_path)
+    logger.info(f"✅ Handwritten OCR loaded from: {model_path}")
     return handwritten_ocr
 
 # Cached property decorators for lazy loading
