@@ -34,6 +34,9 @@ test_results/
 models/checkpoint_*.pth
 models/models/checkpoint_*.pth
 
+# Large model files - use Git LFS or external storage for deployment
+# models/best_model.pth
+
 # Temporary files
 temp_*.jpg
 temp_*.png
