@@ -313,3 +313,4 @@ echo "   - View logs: sudo journalctl -u smartvisionshop -f"
 echo "   - Restart service: sudo systemctl restart smartvisionshop"
 echo ""
 print_success "SmartVisionShop is ready for production! 🎉"
+

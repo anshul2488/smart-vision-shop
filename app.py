@@ -22,7 +22,16 @@ import logging
 import threading
 import time
 from functools import lru_cache
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
+import re
+import difflib
+
+# Try to import pyspellchecker
+try:
+    from spellchecker import SpellChecker
+    SPELLCHECK_AVAILABLE = True
+except ImportError:
+    SPELLCHECK_AVAILABLE = False
 
 # Add current directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -32,8 +41,11 @@ app = Flask(__name__)
 app.secret_key = 'smartshop_vision_secret_key_2024'  # For session management
 CORS(app)
 
-# Configure logging - only show errors
-logging.basicConfig(level=logging.ERROR)
+# Configure logging - show info and above for debugging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Model Cache and Lazy Loading
@@ -84,6 +96,276 @@ class ModelCache:
 
 # Global model cache instance
 model_cache = ModelCache()
+
+# Fast Text Corrector (spell checker) - optimized with caching
+class FastTextCorrector:
+    """Optimized text corrector with caching and batch processing"""
+    
+    def __init__(self):
+        # Common grocery item corrections (OCR errors -> correct)
+        self.item_corrections = {
+            # Common misspellings
+            'basmai': 'basmati', 'basmti': 'basmati', 'basmat': 'basmati',
+            'grigina': 'original', 'orginal': 'original', 'orginl': 'original', 'orignal': 'original',
+            'lpack': 'pack', 'pak': 'pack', 'pck': 'pack',
+            'pousdec': 'powder', 'pousedec': 'powder', 'powdr': 'powder', 'powde': 'powder',
+            'chilli': 'chili', 'chili': 'chili', 'chilies': 'chili',
+            'redchilli': 'red chili', 'redchili': 'red chili',
+            'tamatar': 'tomato', 'tamato': 'tomato', 'tamatr': 'tomato',
+            'pyaz': 'onion', 'pyaaz': 'onion',
+            'aloo': 'potato', 'alo': 'potato',
+            'dahi': 'curd', 'doodh': 'milk', 'dudh': 'milk',
+            'makhan': 'butter', 'chawal': 'rice', 'gehun': 'wheat',
+            'atta': 'flour', 'chini': 'sugar', 'namak': 'salt',
+            'nimbu': 'lemon', 'adrak': 'ginger', 'lehsun': 'garlic',
+            'paneer': 'cheese', 'chai': 'tea', 'kapi': 'coffee',
+            'namkeen': 'chips', 'sabun': 'soap', 'shampo': 'shampoo',
+            # Common product name patterns
+            'bisciut': 'biscuit', 'biscuts': 'biscuit', 'biscut': 'biscuit',
+            'biscuits': 'biscuit', 'biscket': 'biscuit',
+            'pacle': 'parle', 'parleg': 'parle-g', 'pacle-g': 'parle-g',
+            # Additional common OCR errors
+            'tto': 'to', 'sapann': 'soap', 'looc': 'loaf',
+        }
+        
+        # Unit corrections (common OCR errors)
+        self.unit_corrections = {
+            'sun': 'kg', 'kehirooc': 'kg', 'kgrooc': 'kg', 'kgirooc': 'kg',
+            'kilrooc': 'kg', 'kilgrooc': 'kg', 'q': 'kg',
+            'k': 'kg', 'kg': 'kg', 'kilogram': 'kg', 'kilo': 'kg',
+            'g': 'g', 'gram': 'g', 'gm': 'g', 'grams': 'g',
+            'l': 'l', 'liter': 'l', 'litre': 'l',
+            'ml': 'ml', 'milliliter': 'ml', 'millilitre': 'ml',
+            'pack': 'pack', 'packs': 'pack', 'pkt': 'pack', 'packet': 'pack',
+            'pcs': 'pieces', 'pc': 'pieces', 'piece': 'pieces', 'pieces': 'pieces',
+            'dozen': 'dozen', 'dz': 'dozen',
+            'box': 'box', 'boxes': 'box',
+            'bottle': 'bottle', 'bottles': 'bottle',
+            'tin': 'tin', 'tins': 'tin', 'can': 'can', 'cans': 'can',
+            'bag': 'bag', 'bags': 'bag', 'loaf': 'loaf', 'loaves': 'loaf',
+        }
+        
+        # Cache for corrections
+        self.correction_cache = {}
+        
+        # Initialize spell checker if available
+        self.spell_checker = None
+        if SPELLCHECK_AVAILABLE:
+            try:
+                self.spell_checker = SpellChecker()
+                # Add grocery terms to dictionary
+                grocery_terms = list(self.item_corrections.values())
+                for term in grocery_terms:
+                    if isinstance(term, str) and len(term.split()) == 1:
+                        self.spell_checker.word_frequency.load_words([term])
+            except Exception as e:
+                logger.warning(f"Spell checker initialization failed: {e}")
+                self.spell_checker = None
+    
+    def correct_item_name(self, item_name: str) -> str:
+        """Correct grocery item name with spell checking (cached)"""
+        if not item_name or len(item_name.strip()) < 2:
+            return item_name
+        
+        # Check cache first
+        cache_key = item_name.lower().strip()
+        if cache_key in self.correction_cache:
+            # Preserve original case if cached
+            cached = self.correction_cache[cache_key]
+            if item_name.isupper():
+                return cached.upper()
+            elif item_name.istitle():
+                return cached.title()
+            return cached
+        
+        original = item_name.strip()
+        # Normalize: replace underscores and special chars with spaces
+        normalized = re.sub(r'[_\-\W]+', ' ', original)
+        corrected = normalized.lower().strip()
+        
+        # First, check direct corrections (exact match)
+        if corrected in self.item_corrections:
+            result = self.item_corrections[corrected].title()
+            self.correction_cache[cache_key] = result
+            return result
+        
+        # Check for partial matches in multi-word items
+        words = corrected.split()
+        corrected_words = []
+        has_correction = False
+        
+        for word in words:
+            original_word = word
+            # Clean word (remove special chars)
+            word_clean = re.sub(r'[^\w]', '', word).lower()
+            
+            # Skip very short words, numbers, and single chars
+            if len(word_clean) <= 2 or word_clean.isdigit():
+                corrected_words.append(original_word)
+                continue
+            
+            word_corrected = None
+            
+            # Check direct correction
+            if word_clean in self.item_corrections:
+                word_corrected = self.item_corrections[word_clean]
+                has_correction = True
+            # Check fuzzy match with grocery items first (higher priority)
+            else:
+                best_match = self._fuzzy_match_word(word_clean, list(self.item_corrections.keys()))
+                if best_match and difflib.SequenceMatcher(None, word_clean, best_match).ratio() > 0.7:
+                    word_corrected = self.item_corrections[best_match]
+                    has_correction = True
+                # Then try spell checker if available
+                elif self.spell_checker:
+                    try:
+                        correction = self.spell_checker.correction(word_clean)
+                        if correction and correction != word_clean:
+                            # Prefer known grocery terms
+                            if correction in self.item_corrections.values():
+                                word_corrected = correction
+                                has_correction = True
+                            else:
+                                word_corrected = correction
+                                has_correction = True
+                    except Exception:
+                        pass
+            
+            # Use corrected word if found, otherwise keep original
+            if word_corrected:
+                corrected_words.append(word_corrected)
+            else:
+                corrected_words.append(original_word)
+        
+        # Reconstruct the corrected name
+        corrected_name = ' '.join(corrected_words)
+        
+        # Only apply capitalization if we made corrections
+        if has_correction:
+            corrected_name = ' '.join(word.capitalize() for word in corrected_name.split())
+        
+        # If correction is too different, return original
+        similarity = difflib.SequenceMatcher(None, original.lower(), corrected_name.lower()).ratio()
+        if similarity < 0.5 and not has_correction:
+            self.correction_cache[cache_key] = original
+            return original
+        
+        self.correction_cache[cache_key] = corrected_name
+        return corrected_name
+    
+    def correct_unit(self, unit: str) -> str:
+        """Correct unit name"""
+        if not unit:
+            return unit
+        
+        unit_lower = unit.lower().strip()
+        
+        # Check cache
+        if unit_lower in self.correction_cache:
+            return self.correction_cache[unit_lower]
+        
+        # Direct match
+        if unit_lower in self.unit_corrections:
+            result = self.unit_corrections[unit_lower]
+            self.correction_cache[unit_lower] = result
+            return result
+        
+        # Fuzzy match for similar units
+        best_match = self._fuzzy_match_word(unit_lower, list(self.unit_corrections.keys()))
+        if best_match:
+            similarity = difflib.SequenceMatcher(None, unit_lower, best_match).ratio()
+            if similarity > 0.6:
+                result = self.unit_corrections[best_match]
+                self.correction_cache[unit_lower] = result
+                return result
+        
+        # Default to original if no good match
+        self.correction_cache[unit_lower] = unit
+        return unit
+    
+    def _fuzzy_match_word(self, word: str, candidates: List[str]) -> Optional[str]:
+        """Find best fuzzy match from candidates"""
+        if not word or not candidates:
+            return None
+        
+        best_match = None
+        best_ratio = 0.0
+        
+        for candidate in candidates:
+            ratio = difflib.SequenceMatcher(None, word, candidate).ratio()
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_match = candidate
+        
+        return best_match if best_ratio > 0.6 else None
+    
+    def correct_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """Correct a single item dictionary"""
+        corrected_item = item.copy()
+        
+        # Correct item name
+        if 'item_name' in item:
+            original_name = item['item_name']
+            corrected_name = self.correct_item_name(original_name)
+            corrected_item['item_name'] = corrected_name
+            if original_name != corrected_name:
+                corrected_item['original_item_name'] = original_name
+        
+        # Correct unit
+        if 'unit' in item:
+            original_unit = item['unit']
+            corrected_unit = self.correct_unit(original_unit)
+            corrected_item['unit'] = corrected_unit
+            if original_unit != corrected_unit:
+                corrected_item['original_unit'] = original_unit
+        
+        # Update search query if it exists
+        if 'search_query' in corrected_item:
+            corrected_item['search_query'] = f"{corrected_item.get('item_name', '')} {corrected_item.get('quantity', '')} {corrected_item.get('unit', '')}".strip()
+        
+        return corrected_item
+    
+    def correct_text(self, text: str) -> str:
+        """Correct entire text line"""
+        if not text:
+            return text
+        
+        # Try to extract item pattern: "item_name [x] quantity unit"
+        pattern = r'^(.+?)\s+(?:x\s+)?(\d+(?:\.\d+)?)\s+([a-zA-Z]+)$'
+        match = re.match(pattern, text.strip(), re.IGNORECASE)
+        
+        if match:
+            item_name = match.group(1).strip()
+            quantity = match.group(2)
+            unit = match.group(3).strip()
+            
+            corrected_name = self.correct_item_name(item_name)
+            corrected_unit = self.correct_unit(unit)
+            
+            return f"{corrected_name} {quantity} {corrected_unit}"
+        else:
+            # Just correct words in text
+            words = text.split()
+            corrected_words = []
+            
+            for word in words:
+                # Check if it looks like a unit
+                if word.lower() in self.unit_corrections or self._fuzzy_match_word(word.lower(), list(self.unit_corrections.keys())):
+                    corrected_words.append(self.correct_unit(word))
+                else:
+                    corrected_words.append(self.correct_item_name(word))
+            
+            return ' '.join(corrected_words)
+
+# Global spell checker instance (lazy loaded)
+_spell_checker_instance = None
+
+def get_spell_checker():
+    """Get or create global spell checker instance"""
+    global _spell_checker_instance
+    if _spell_checker_instance is None:
+        _spell_checker_instance = FastTextCorrector()
+    return _spell_checker_instance
 
 # Pincode management
 PINCODE_FILE = "user_pincode.json"
@@ -149,8 +431,15 @@ def load_ocr_processor():
 
 def load_llm_processor():
     """Lazy load LLM processor"""
-    from grocery_ocr_llm_model import LLMProcessor
-    return LLMProcessor()
+    try:
+        from grocery_ocr_llm_model import LLMProcessor
+        processor = LLMProcessor()
+        logger.info("✅ LLMProcessor initialized successfully (LLM disabled, direct extraction only)")
+        return processor
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize LLMProcessor: {e}", exc_info=True)
+        # Return None - the calling code will handle fallback
+        return None
 
 def load_grocery_model():
     """Lazy load grocery OCR model"""
@@ -337,6 +626,7 @@ def parse_image():
             best_text = ""
             best_confidence = 0
             ocr_method = "fallback"
+            handwritten_ocr = None  # Initialize variable
             
             try:
                 handwritten_ocr = get_handwritten_ocr()
@@ -347,6 +637,13 @@ def parse_image():
                     best_text, best_confidence = handwritten_ocr.predict_hybrid(temp_path)
                     ocr_method = "handwritten_hybrid"
                     logger.info(f"Handwritten OCR result: confidence={best_confidence:.3f}, text_length={len(best_text)}")
+                    
+                    # Create synthetic OCR results from lines for spatial processing
+                    lines = best_text.split('\n')
+                    ocr_results = []
+                    for i, line in enumerate(lines):
+                        if line.strip():
+                            ocr_results.append((line.strip(), best_confidence, (0, i*30, 100, 30)))
                 except Exception as e:
                     logger.warning(f"Handwritten OCR failed: {e}")
                     # Fallback to CRNN only
@@ -355,10 +652,24 @@ def parse_image():
                         best_confidence = 0.6  # Default confidence for CRNN
                         ocr_method = "handwritten_crnn"
                         logger.info(f"CRNN-only result: text_length={len(best_text)}")
+                        
+                        # Create synthetic OCR results from lines
+                        lines = best_text.split('\n')
+                        ocr_results = []
+                        for i, line in enumerate(lines):
+                            if line.strip():
+                                ocr_results.append((line.strip(), best_confidence, (0, i*30, 100, 30)))
                     except Exception as e2:
                         logger.warning(f"CRNN-only also failed: {e2}")
+                        ocr_results = []
             except Exception as e:
                 logger.warning(f"Handwritten OCR not available: {e}")
+                handwritten_ocr = None
+                ocr_results = []
+            
+            # Initialize ocr_results variable if not set
+            if 'ocr_results' not in locals():
+                ocr_results = []
             
             # If handwritten OCR didn't work or not available, use traditional OCR
             if not best_text.strip():
@@ -382,19 +693,20 @@ def parse_image():
                             # Process with OCR directly on the preprocessed file (lazy load)
                             ocr_processor = get_ocr_processor()
                             processed_image = ocr_processor.preprocess_image_optimal(version_path)
-                            ocr_results = ocr_processor.extract_text_optimal(processed_image)
+                            version_ocr_results = ocr_processor.extract_text_optimal(processed_image)
                             
-                            if ocr_results:
+                            if version_ocr_results:
                                 # Calculate average confidence
-                                avg_confidence = sum(conf for _, conf, _ in ocr_results) / len(ocr_results)
+                                avg_confidence = sum(conf for _, conf, _ in version_ocr_results) / len(version_ocr_results)
                                 
                                 # Combine text
-                                predicted_text = ' '.join(text for text, _, _ in ocr_results)
+                                predicted_text = ' '.join(text for text, _, _ in version_ocr_results)
                                 
                                 # If this version has better confidence, use it
                                 if avg_confidence > best_confidence and len(predicted_text.strip()) > len(best_text.strip()):
                                     best_confidence = avg_confidence
                                     best_text = predicted_text
+                                    ocr_results = version_ocr_results  # Save OCR results with spatial info
                                     ocr_method = f"traditional_{version_name.lower()}"
                                     
                                     logger.info(f"Better OCR result from {version_name}: confidence={avg_confidence:.3f}, text_length={len(predicted_text)}")
@@ -413,19 +725,110 @@ def parse_image():
                     best_confidence = sum(conf for _, conf, _ in ocr_results) / len(ocr_results) if ocr_results else 0
                     ocr_method = "traditional_original"
             
-            # Process with LLM (lazy load)
+            # Process text extraction (NO LLM dependency)
             llm_processor = get_llm_processor()
-            llm_results = llm_processor.process_text(best_text)
             
-            # Extract items
+            # If LLM processor failed to load, use direct extraction
+            if llm_processor is None:
+                logger.warning("LLM processor not available, using direct extraction")
+                from grocery_ocr_llm_model import LLMProcessor
+                try:
+                    # Create a simple processor just for extraction
+                    simple_processor = LLMProcessor()
+                    llm_results = simple_processor.process_text(best_text)
+                except Exception as e:
+                    logger.error(f"Failed to create processor: {e}")
+                    # Final fallback: create minimal result
+                    from grocery_ocr_llm_model import LLMProcessor
+                    temp_processor = LLMProcessor()
+                    llm_results = temp_processor._extract_items_simple(best_text)
+                    llm_results = {
+                        'original_text': best_text,
+                        'llm_output': 'Direct extraction (processor init failed)',
+                        'extracted_items': llm_results if isinstance(llm_results, list) else [],
+                        'confidence': 0.6
+                    }
+            else:
+                llm_results = llm_processor.process_text(best_text)
+            
+            # Additional processing: Use OCR spatial information if available
+            if ocr_results and len(llm_results.get('extracted_items', [])) < 2:
+                # Try to use spatial grouping from OCR results
+                logger.info("Using spatial information from OCR to improve extraction")
+                # Group OCR results by position
+                spatial_items = []
+                seen_positions = set()
+                
+                for text, conf, bbox in ocr_results:
+                    y_pos = bbox[1]  # y coordinate
+                    # Group by similar y position (same line)
+                    position_key = (y_pos // 30) * 30  # Round to nearest 30 pixels
+                    
+                    if position_key not in seen_positions:
+                        seen_positions.add(position_key)
+                        # Try to extract items from this line
+                        if llm_processor:
+                            line_items = llm_processor._extract_items_simple(text)
+                        else:
+                            from grocery_ocr_llm_model import LLMProcessor
+                            temp_proc = LLMProcessor()
+                            line_items = temp_proc._extract_items_simple(text)
+                        spatial_items.extend(line_items)
+                
+                if spatial_items:
+                    logger.info(f"Spatial extraction found {len(spatial_items)} items")
+                    # Merge with LLM results, avoiding duplicates
+                    existing_names = {item.get('item_name', '').lower() for item in llm_results.get('extracted_items', [])}
+                    for item in spatial_items:
+                        if item.get('item_name', '').lower() not in existing_names:
+                            llm_results['extracted_items'].append(item)
+                            existing_names.add(item.get('item_name', '').lower())
+            
+            # Extract items and apply spell checking
+            spell_checker = get_spell_checker()
             items = []
-            for item in llm_results['extracted_items']:
-                items.append({
-                    'item_name': item['item_name'],
-                    'quantity': item['quantity'],
-                    'unit': item['unit'],
-                    'confidence': item['confidence']
-                })
+            
+            # Ensure extracted_items exists and is a list
+            extracted_items = llm_results.get('extracted_items', [])
+            if not isinstance(extracted_items, list):
+                extracted_items = []
+            
+            logger.info(f"LLM extracted {len(extracted_items)} items from text: {best_text[:100]}")
+            logger.info(f"LLM results: {llm_results}")
+            
+            for item in extracted_items:
+                try:
+                    # Apply spell checking corrections
+                    corrected_item = spell_checker.correct_item({
+                        'item_name': item.get('item_name', ''),
+                        'quantity': item.get('quantity', ''),
+                        'unit': item.get('unit', '')
+                    })
+                    # Include both 'name' and 'item_name' for frontend compatibility
+                    item_name = corrected_item['item_name']
+                    items.append({
+                        'name': item_name,  # Frontend expects 'name'
+                        'item_name': item_name,  # Also include 'item_name' for compatibility
+                        'quantity': str(corrected_item.get('quantity', item.get('quantity', ''))),
+                        'unit': corrected_item['unit'] or item.get('unit', ''),
+                        'confidence': item.get('confidence', 0.6),
+                        'original_item_name': corrected_item.get('original_item_name'),
+                        'original_unit': corrected_item.get('original_unit')
+                    })
+                except Exception as e:
+                    logger.warning(f"Error correcting item {item}: {e}")
+                    # Fallback: add item without correction
+                    item_name = item.get('item_name', '')
+                    items.append({
+                        'name': item_name,  # Frontend expects 'name'
+                        'item_name': item_name,  # Also include 'item_name' for compatibility
+                        'quantity': str(item.get('quantity', '')),
+                        'unit': item.get('unit', ''),
+                        'confidence': item.get('confidence', 0.6)
+                    })
+            
+            logger.info(f"Final items count: {len(items)}")
+            logger.info(f"Items: {items}")
             
             # Clean up temp files
             os.remove(temp_path)
@@ -433,28 +836,38 @@ def parse_image():
             if os.path.exists("temp_preprocessed"):
                 shutil.rmtree("temp_preprocessed")
             
-            return jsonify({
+            response_data = {
                 'success': True,
                 'raw_text': best_text,
                 'items': items,
                 'total_items': len(items),
-                'confidence': llm_results['confidence'],
+                'confidence': llm_results.get('confidence', 0.6),
                 'ocr_confidence': best_confidence,
                 'processing_info': {
                     'ocr_method': ocr_method,
-                    'handwritten_ocr_available': handwritten_ocr.is_available(),
+                    'handwritten_ocr_available': handwritten_ocr.is_available() if handwritten_ocr else False,
                     'preprocessing_used': ocr_method.startswith('traditional'),
                     'best_confidence': best_confidence
                 }
-            })
+            }
+            
+            logger.info(f"Sending response with {len(items)} items")
+            return jsonify(response_data)
             
         except Exception as e:
             # Clean up temp files on error
+            logger.error(f"Error parsing image: {e}", exc_info=True)
             if os.path.exists(temp_path):
-                os.remove(temp_path)
+                try:
+                    os.remove(temp_path)
+                except:
+                    pass
             if os.path.exists("temp_preprocessed"):
-                import shutil
-                shutil.rmtree("temp_preprocessed")
+                try:
+                    import shutil
+                    shutil.rmtree("temp_preprocessed")
+                except:
+                    pass
             raise e
             
     except Exception as e:
@@ -471,19 +884,68 @@ def parse_text():
         if not text.strip():
             return jsonify({'error': 'No text provided'}), 400
         
-        # Process with LLM (lazy load)
+        # Process text extraction (NO LLM dependency)
         llm_processor = get_llm_processor()
-        llm_results = llm_processor.process_text(text)
         
-        # Extract items
+        # If LLM processor failed to load, use direct extraction
+        if llm_processor is None:
+            logger.warning("LLM processor not available, using direct extraction")
+            from grocery_ocr_llm_model import LLMProcessor
+            try:
+                simple_processor = LLMProcessor()
+                llm_results = simple_processor.process_text(text)
+            except Exception as e:
+                logger.error(f"Failed to create processor: {e}")
+                # Final fallback
+                from grocery_ocr_llm_model import LLMProcessor
+                temp_processor = LLMProcessor()
+                direct_items = temp_processor._extract_items_simple(text)
+                llm_results = {
+                    'original_text': text,
+                    'llm_output': 'Direct extraction (processor init failed)',
+                    'extracted_items': direct_items if isinstance(direct_items, list) else [],
+                    'confidence': 0.6
+                }
+        else:
+            llm_results = llm_processor.process_text(text)
+        
+        # Extract items and apply spell checking
+        spell_checker = get_spell_checker()
         items = []
-        for item in llm_results['extracted_items']:
-            items.append({
-                'item_name': item['item_name'],
-                'quantity': item['quantity'],
-                'unit': item['unit'],
-                'confidence': item['confidence']
-            })
+        extracted_items = llm_results.get('extracted_items', [])
+        if not isinstance(extracted_items, list):
+            extracted_items = []
+        
+        for item in extracted_items:
+            try:
+                # Apply spell checking corrections
+                corrected_item = spell_checker.correct_item({
+                    'item_name': item.get('item_name', ''),
+                    'quantity': item.get('quantity', ''),
+                    'unit': item.get('unit', '')
+                })
+                # Include both 'name' and 'item_name' for frontend compatibility
+                item_name = corrected_item['item_name']
+                items.append({
+                    'name': item_name,  # Frontend expects 'name'
+                    'item_name': item_name,  # Also include 'item_name' for compatibility
+                    'quantity': str(corrected_item.get('quantity', item.get('quantity', ''))),
+                    'unit': corrected_item['unit'] or item.get('unit', ''),
+                    'confidence': item.get('confidence', 0.6),
+                    'original_item_name': corrected_item.get('original_item_name'),
+                    'original_unit': corrected_item.get('original_unit')
+                })
+            except Exception as e:
+                logger.warning(f"Error correcting item {item}: {e}")
+                # Fallback: add item without correction
+                item_name = item.get('item_name', '')
+                items.append({
+                    'name': item_name,  # Frontend expects 'name'
+                    'item_name': item_name,  # Also include 'item_name' for compatibility
+                    'quantity': str(item.get('quantity', '')),
+                    'unit': item.get('unit', ''),
+                    'confidence': item.get('confidence', 0.6)
+                })
         
         return jsonify({
             'success': True,
@@ -510,6 +972,9 @@ def search_prices():
         
         results = []
         
+        # Use fast spell checker for correction before search
+        text_corrector = get_spell_checker()
+        
         for item in items:
             item_name = item.get('item_name', '')
             quantity = item.get('quantity', '')
@@ -518,14 +983,20 @@ def search_prices():
             if not item_name:
                 continue
             
-            # Search for the item
-            search_query = f"{item_name} {quantity} {unit}".strip()
+            # Apply additional text correction before search (safeguard)
+            corrected_item_name = text_corrector.correct_item_name(item_name)
+            corrected_unit = text_corrector.correct_unit(unit)
+            
+            # Use corrected values for search
+            search_query = f"{corrected_item_name} {quantity} {corrected_unit}".strip()
             
             item_results = {
-                'item_name': item_name,
+                'item_name': corrected_item_name,
                 'quantity': quantity,
-                'unit': unit,
+                'unit': corrected_unit,
                 'search_query': search_query,
+                'original_item_name': item_name,  # Keep original for display
+                'original_unit': unit,  # Keep original for display
                 'platforms': {}
             }
             
@@ -533,11 +1004,11 @@ def search_prices():
             from price_scraper import PriceScraper
             price_scraper = PriceScraper()
             
-            # Create user item dictionary
+            # Create user item dictionary (use corrected values)
             user_item = {
-                'item_name': item_name,
+                'item_name': corrected_item_name,
                 'quantity': quantity,
-                'unit': unit
+                'unit': corrected_unit
             }
             
             # Get best prices with smart matching (without saving individual files)
@@ -743,6 +1214,58 @@ def get_preprocessing_info():
         'handwritten_ocr_available': get_handwritten_ocr().is_available() if get_handwritten_ocr() else False,
         'handwritten_ocr_info': get_handwritten_ocr().get_model_info() if get_handwritten_ocr() else {}
     })
+
+@app.route('/api/spell-check', methods=['POST'])
+def spell_check():
+    """Spell check and correct text/items"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        spell_checker = get_spell_checker()
+        
+        # Handle single text string
+        if 'text' in data:
+            text = data.get('text', '')
+            corrected = spell_checker.correct_text(text)
+            return jsonify({
+                'success': True,
+                'original': text,
+                'corrected': corrected
+            })
+        
+        # Handle single item
+        if 'item' in data:
+            item = data.get('item', {})
+            corrected_item = spell_checker.correct_item(item)
+            return jsonify({
+                'success': True,
+                'original': item,
+                'corrected': corrected_item
+            })
+        
+        # Handle list of items
+        if 'items' in data:
+            items = data.get('items', [])
+            corrected_items = []
+            for item in items:
+                corrected_item = spell_checker.correct_item(item)
+                corrected_items.append(corrected_item)
+            
+            return jsonify({
+                'success': True,
+                'original': items,
+                'corrected': corrected_items,
+                'total_items': len(corrected_items)
+            })
+        
+        return jsonify({'error': 'Invalid request. Provide "text", "item", or "items"'}), 400
+        
+    except Exception as e:
+        logger.error(f"Error in spell check: {e}")
+        return jsonify({'error': f'Failed to spell check: {str(e)}'}), 500
 
 @app.errorhandler(404)
 def not_found(error):
